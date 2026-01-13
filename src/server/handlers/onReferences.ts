@@ -107,10 +107,21 @@ export function mkOnReferencesHandler(
                 return references;
             }
 
+            // If the definition is non-public, we can do a small optimization and only search in one AST.
+            const shouldPerformGlobalSearch = definitions.some(
+                (definition) => definition.visibility === 'Public',
+            );
+
             const context = getContext(uri);
-            const statuses = context.astResolver.requestAll(
+            const localStatus = context.astResolver.request(
+                uri,
                 isVirtualFileSystemReady,
             );
+            const statuses = shouldPerformGlobalSearch
+                ? context.astResolver.requestAll(isVirtualFileSystemReady)
+                : localStatus
+                ? [localStatus]
+                : [];
             for (const status of statuses) {
                 try {
                     if (!status.ast) {
