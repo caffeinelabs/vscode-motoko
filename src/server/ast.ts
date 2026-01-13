@@ -41,6 +41,12 @@ export default class AstResolver {
         this._scopeCache.clear();
     }
 
+    listLoadedTypedFiles(): Set<string> {
+        const loaded = new Set<string>();
+        this._typedCache.forEach((_value, key) => loaded.add(key));
+        return loaded;
+    }
+
     update(uri: string, typed: boolean, withDeps: boolean): boolean {
         const text = tryGetFileText(uri);
         if (!text) {
