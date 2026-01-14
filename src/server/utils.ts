@@ -317,7 +317,7 @@ export function getMocJs(
 ): ResultAsync<string, Error> {
     const destPath = join(destDir, `moc-${version}.js`);
     if (existsSync(destPath)) {
-        console.log(`moc-${version}.js already exixts. Won't download.`);
+        console.log(`moc-${version}.js already exists. Won't download.`);
         return okAsync(destPath);
     }
     console.log(`Downloading moc-${version}.js`);

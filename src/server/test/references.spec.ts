@@ -7,7 +7,9 @@ import {
     defaultBeforeAll,
     defaultAfterAll,
     openTextDocuments,
+    runTest,
 } from './helpers';
+import { TEST_GET_LOADED_TYPED_FILES } from '../../common/connectionTypes';
 import { Connection, Location, Position, Range } from 'vscode-languageserver';
 import { compareLocations } from '../utils';
 
@@ -16,20 +18,63 @@ type LocationWithMetadata = {
     isDefinition: boolean;
 };
 
+type RangeWithMetadata = {
+    range: Range;
+    isDefinition: boolean;
+};
+
 jest.setTimeout(60000);
+
+const rootUri = URI.parse(join(cwd(), 'test', 'definition'));
+
+async function testReferencesImpl(
+    client: Connection,
+    textDocuments: Map<string, TextDocument>,
+    expected: LocationWithMetadata[],
+): Promise<void> {
+    // Open all files that we plan to test. This is to avoid opening and
+    // reading documents multiple times.
+    await openTextDocuments(
+        client,
+        textDocuments,
+        rootUri,
+        expected.map((l) => l.location.uri),
+    );
+    // Test that finding all references from every expected reference will
+    // be equal.
+    await Promise.all(
+        expected.map(async (loc) => {
+            const textDocument = textDocuments.get(loc.location.uri);
+            for (const includeDeclaration of [false, true]) {
+                const locations = await client.sendRequest<Location[]>(
+                    'textDocument/references',
+                    {
+                        textDocument,
+                        position: loc.location.range.start,
+                        context: { includeDeclaration },
+                    },
+                );
+                const expected2 = includeDeclaration
+                    ? expected
+                    : expected.filter((l) => !l.isDefinition);
+                expect(locations.sort(compareLocations)).toStrictEqual(
+                    expected2.map((l) => l.location).sort(compareLocations),
+                );
+            }
+        }),
+    );
+}
 
 describe('references', () => {
     let client: Connection;
     let server: Connection;
-
-    const rootUri = URI.parse(join(cwd(), 'test', 'definition'));
 
     function location(
         path: string,
         line: number,
         startCharacter: number,
         endCharacter: number,
-        isDefinition = true,
+        isDefinition: boolean,
     ): LocationWithMetadata {
         const location = Location.create(
             URI.parse(join(rootUri.fsPath, path)).toString(),
@@ -46,37 +91,7 @@ describe('references', () => {
     async function testReferences(
         expected: LocationWithMetadata[],
     ): Promise<void> {
-        // Open all files that we plan to test. This is to avoid opening and
-        // reading documents multiple times.
-        await openTextDocuments(
-            client,
-            textDocuments,
-            rootUri,
-            expected.map((l) => l.location.uri),
-        );
-        // Test that finding all references from every expected reference will
-        // be equal.
-        await Promise.all(
-            expected.map(async (loc) => {
-                const textDocument = textDocuments.get(loc.location.uri);
-                for (const includeDeclaration of [false, true]) {
-                    const locations = await client.sendRequest<Location[]>(
-                        'textDocument/references',
-                        {
-                            textDocument,
-                            position: loc.location.range.start,
-                            context: { includeDeclaration },
-                        },
-                    );
-                    const expected2 = includeDeclaration
-                        ? expected
-                        : expected.filter((l) => !l.isDefinition);
-                    expect(locations.sort(compareLocations)).toStrictEqual(
-                        expected2.map((l) => l.location).sort(compareLocations),
-                    );
-                }
-            }),
-        );
+        return testReferencesImpl(client, textDocuments, expected);
     }
 
     beforeAll(async () => {
@@ -121,6 +136,12 @@ describe('references', () => {
             location('B.mo', 9, 20, 24, true), // definition of meth
         ]));
 
+    test('Can find all references of local variable', () =>
+        testReferences([
+            location('A.mo', 6, 15, 16, false), // a in a.meth(...)
+            location('A.mo', 5, 12, 13, true), // definition of a
+        ]));
+
     test('Can find all references of circular chain', () => {
         const refs = [12, 14, 16, 18, 20, 22].map(
             (column) => location('circular.mo', 5, column, column + 1, false), // /\.o\.?/
@@ -163,5 +184,57 @@ describe('references', () => {
             location('record.mo', 14, 18, 21, true), // expression definition of bar (field assignment)
             location('record.mo', 15, 26, 29, true), // type definition of bar (pattern type annotation)
             location('record.mo', 15, 43, 46, false), // bar in foo.bar (test3)
+        ]));
+});
+
+// Note: this test suite opens and closes each document individually without
+// caching them and runs considerably slower than the 'references' test. You
+// probably want to use that test suite instead.
+describe('local references', () => {
+    function range(
+        line: number,
+        startCharacter: number,
+        endCharacter: number,
+        isDefinition: boolean,
+    ): RangeWithMetadata {
+        const range = Range.create(
+            Position.create(line, startCharacter),
+            Position.create(line, endCharacter),
+        );
+        return { range, isDefinition };
+    }
+
+    async function testReferences(
+        path: string,
+        expected: RangeWithMetadata[],
+    ): Promise<void> {
+        const uri = URI.parse(join(rootUri.fsPath, path)).toString();
+        const loadedTypedFiles = await runTest(
+            rootUri,
+            async (client) => {
+                const textDocuments = new Map<string, TextDocument>();
+                await testReferencesImpl(
+                    client,
+                    textDocuments,
+                    expected.map((range) => ({
+                        location: Location.create(uri, range.range),
+                        isDefinition: range.isDefinition,
+                    })),
+                );
+                return await client.sendRequest(TEST_GET_LOADED_TYPED_FILES, {
+                    uri,
+                });
+            },
+            true,
+            { useDefaultMocJs: true },
+        );
+
+        expect(loadedTypedFiles).toStrictEqual([uri]);
+    }
+
+    test('Only one AST is loaded for local reference', () =>
+        testReferences('A.mo', [
+            range(6, 15, 16, false), // a in a.meth(...)
+            range(5, 12, 13, true), // definition of a
         ]));
 });

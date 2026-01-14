@@ -54,6 +54,14 @@ export const TEST_GET_DEPENDENCY_GRAPH = new RequestType<
     any
 >('vscode-motoko/test-get-dependency-graph');
 
+export const TEST_GET_LOADED_TYPED_FILES = new RequestType<
+    {
+        uri: string;
+    },
+    string[],
+    any
+>('vscode-motoko/test-get-loaded-typed-files');
+
 // Server emits this notification when initialized. Useful for benchmarking.
 export const TEST_SERVER_INITIALIZED = new NotificationType<{}>(
     'custom/initialized',

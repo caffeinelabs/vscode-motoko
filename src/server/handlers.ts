@@ -43,6 +43,7 @@ import {
     TEST_FILE_REQUEST,
     TestResult,
     TEST_GET_DEPENDENCY_GRAPH,
+    TEST_GET_LOADED_TYPED_FILES,
     TEST_SERVER_INITIALIZED,
 } from '../common/connectionTypes';
 import {
@@ -1901,7 +1902,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         }
     });
 
-    // Install and import mops package
     connection.onRequest(TEST_GET_DEPENDENCY_GRAPH, (params) => {
         const graph = getContext(params.uri)
             .astResolver.getDependencyGraph()
@@ -1911,6 +1911,13 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             node,
             graph.directDependenciesOf(node),
         ]);
+    });
+
+    connection.onRequest(TEST_GET_LOADED_TYPED_FILES, (params) => {
+        const loaded = getContext(
+            params.uri,
+        ).astResolver.listLoadedTypedFiles();
+        return Array.from(loaded.keys());
     });
 
     const diagnosticMap = new Map<string, Diagnostic[]>();
