@@ -26,6 +26,7 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
     - run: npm ci
-    - run: ls node_modules
+    - run: ls node_modules/motoko
+    - run: ls node_modules/motoko/contrib
     - run: npm run compile
     - run: npm test
