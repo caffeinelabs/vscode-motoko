@@ -16,11 +16,14 @@ export interface Reference {
     node: Node;
 }
 
+type Visibility = 'Public' | 'Private' | 'System';
+
 export interface Definition {
     uri: string;
     cursor: Node;
     body: Node;
     name: string | undefined;
+    visibility: Visibility;
 }
 
 interface Search {
@@ -28,6 +31,16 @@ interface Search {
     name: string;
     start?: Position;
     end?: Position;
+}
+
+function matchVisibility(vis: AST): Visibility {
+    if (vis === 'Public' || vis === 'Private' || vis === 'System') {
+        return vis;
+    }
+
+    // `astjs.ml` serializes either as a string (handled above) or an object
+    // representing that it's public.
+    return 'Public';
 }
 
 function spanToPos(span: Span | undefined): Position | undefined {
@@ -167,6 +180,38 @@ export function locationFromUriAndRange(uri: string, range: Range): Location {
     return location;
 }
 
+function findDecField(node: Node): Node | undefined {
+    if (node.name === 'DecField') {
+        return node;
+    }
+
+    if (!node.parent) {
+        return;
+    }
+
+    const isPattern =
+        node.name.endsWith('P') ||
+        node.name === 'ValPF' ||
+        node.name === 'TypPF';
+    const isDecOrId = node.name.endsWith('D');
+    if (isPattern || isDecOrId) {
+        return findDecField(node.parent);
+    }
+
+    return;
+}
+
+function searchVisibility(
+    node: Node,
+    defaultVisibility: Visibility = 'Private',
+): Visibility {
+    const decField = findDecField(node);
+    const visibility = decField
+        ? matchVisibility(decField.args![1])
+        : defaultVisibility;
+    return visibility;
+}
+
 function findNameInPattern(
     search: Search,
     pat: Node,
@@ -240,6 +285,23 @@ export function findDefinitions(
     return definitions;
 }
 
+function searchTypeFromIdContext(node: Node): 'variable' | 'type' {
+    if (!node.parent) {
+        // No parent, which is strange. Let's use a sane default.
+        console.warn('ID node has no parent:', node);
+        return 'variable';
+    }
+
+    const name = node.parent.name;
+    if (name === 'TypD') {
+        // Searching a type.
+        return 'type';
+    } else {
+        // Either a variable or a default.
+        return 'variable';
+    }
+}
+
 function getSearchPath(node: Node): Search[] {
     return (
         matchNode(node, 'DotE', (qual: Node, id: Node) => [
@@ -310,7 +372,7 @@ function getSearchPath(node: Node): Search[] {
         ]) ||
         matchNode(node, 'ID', (name: string) => [
             {
-                type: 'variable',
+                type: searchTypeFromIdContext(node),
                 name,
                 start: spanToPos(node.start),
                 end: spanToPos(node.end),
@@ -427,6 +489,7 @@ export function followImport(
             cursor: exportNode,
             body: exportNode,
             name: undefined,
+            visibility: 'Public',
         };
     });
 }
@@ -595,6 +658,7 @@ function searchDeclaration(
     reference: Reference,
     search: Search,
     dec: Node,
+    visibility: Visibility,
 ): Definition | undefined {
     function matchId(id: Node, body: Node): Definition | undefined {
         const name = getIdName(id);
@@ -604,6 +668,7 @@ function searchDeclaration(
                   cursor: id,
                   body,
                   name,
+                  visibility,
               }
             : undefined;
     }
@@ -617,6 +682,7 @@ function searchDeclaration(
                     cursor: varNode,
                     body,
                     name,
+                    visibility,
                 }
             );
         }) ||
@@ -629,6 +695,7 @@ function searchDeclaration(
                       cursor: varNode,
                       body: dec,
                       name,
+                      visibility,
                   }
                 : undefined;
         }) ||
@@ -646,6 +713,7 @@ function searchTypeBinding(
     reference: Reference,
     search: Search,
     dec: Node,
+    visibility: Visibility,
 ): Definition | undefined {
     return (
         matchNode(dec, 'TypD', (id: Node, _: Node) => {
@@ -656,6 +724,7 @@ function searchTypeBinding(
                       cursor: id,
                       body: dec,
                       name,
+                      visibility,
                   }
                 : undefined;
         }) ||
@@ -667,6 +736,7 @@ function searchTypeBinding(
                       cursor: id,
                       body: dec,
                       name,
+                      visibility,
                   }
                 : undefined;
         })
@@ -689,8 +759,17 @@ export function searchObject(
         // console.log('Searching:', search.name, scope.name, arg.name);
         let definition: Definition | undefined;
         if (search.type === 'variable') {
+            // It's unclear how to determine the visibility of an expression
+            // field or case. For now, we consider it's private. In the case of
+            // references, we hope to eventually find a public definition to
+            // search in other ASTs, if needed.
             definition =
-                searchDeclaration(reference, search, arg) ||
+                searchDeclaration(
+                    reference,
+                    search,
+                    arg,
+                    searchVisibility(arg),
+                ) ||
                 matchNode(arg, 'ExpField', (_mut, id, body) => {
                     const name = getIdName(id)!;
                     return (
@@ -699,11 +778,17 @@ export function searchObject(
                             cursor: id,
                             body,
                             name,
+                            visibility: 'Private',
                         }
                     );
                 }) ||
-                matchNode(arg, 'DecField', (dec: Node) =>
-                    searchDeclaration(reference, search, dec),
+                matchNode(arg, 'DecField', (dec: Node, vis: AST) =>
+                    searchDeclaration(
+                        reference,
+                        search,
+                        dec,
+                        matchVisibility(vis),
+                    ),
                 ) ||
                 matchNode(
                     arg,
@@ -713,8 +798,13 @@ export function searchObject(
                             const definition = matchNode(
                                 field,
                                 'DecField',
-                                (dec: Node) =>
-                                    searchDeclaration(reference, search, dec),
+                                (dec: Node, vis: AST) =>
+                                    searchDeclaration(
+                                        reference,
+                                        search,
+                                        dec,
+                                        matchVisibility(vis),
+                                    ),
                             );
                             if (definition) {
                                 return definition;
@@ -734,25 +824,38 @@ export function searchObject(
                         cursor: pat,
                         body: pat,
                         name,
+                        visibility: 'Private',
                     };
                 }
             }
             if (!definition) {
                 const [name, pat] = findNameInPattern(search, arg) || []; // Function parameters
+                const visibility = searchVisibility(arg);
                 if (pat) {
                     definition = {
                         uri: reference.uri,
                         cursor: pat,
                         body: pat,
                         name,
+                        visibility,
                     };
                 }
             }
         } else if (search.type === 'type') {
             definition =
-                searchTypeBinding(reference, search, arg) ||
-                matchNode(arg, 'DecField', (dec: Node) =>
-                    searchTypeBinding(reference, search, dec),
+                searchTypeBinding(
+                    reference,
+                    search,
+                    arg,
+                    searchVisibility(arg),
+                ) ||
+                matchNode(arg, 'DecField', (dec: Node, vis: AST) =>
+                    searchTypeBinding(
+                        reference,
+                        search,
+                        dec,
+                        matchVisibility(vis),
+                    ),
                 ) ||
                 matchNode(
                     arg,
@@ -762,8 +865,13 @@ export function searchObject(
                             const definition = matchNode(
                                 field,
                                 'DecField',
-                                (dec: Node) =>
-                                    searchTypeBinding(reference, search, dec),
+                                (dec: Node, vis: AST) =>
+                                    searchTypeBinding(
+                                        reference,
+                                        search,
+                                        dec,
+                                        matchVisibility(vis),
+                                    ),
                             );
                             if (definition) {
                                 return definition;
