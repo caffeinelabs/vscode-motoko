@@ -1229,7 +1229,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
     }
 
     function getOffset(text: string, { line, character }: Position): number {
-        const lines = text.split('\n');
+        const lines = text.split('\n'); // TODO: avoid repeated splitting
 
         if (line >= lines.length) {
             throw new Error('Line number out of range');
@@ -1274,14 +1274,14 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
 
         const list = CompletionList.create([], false);
         try {
-            const text = getFileText(uri);
+            const text = getFileText(uri); // TODO: text vs doc, why both?
             const doc = documents.get(uri);
             if (!doc) return list;
             const context = getContext(uri);
-            const status = context.astResolver.requestTyped(uri);
+            const status = context.astResolver.requestTyped(uri); // TODO: Synchronous Type Request blocking the event loop
             const program = status?.program;
             const offset = getOffset(text, position);
-            const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/
+            const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/ // TODO: only works for identifiers, not `call().method` or `xs[0].m`
                 .exec(text.substring(0, offset))
                 ?.slice(1) ?? ['', ''];
             if (!dot) {
