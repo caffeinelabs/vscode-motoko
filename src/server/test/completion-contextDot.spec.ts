@@ -4,7 +4,7 @@ import {
     InitializeResult,
 } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
-import { clientInitParams, setupClientServer } from '../test/mock';
+import { clientInitParams, setupClientServer } from './mock';
 import { cwd } from 'node:process';
 import { readFileSync } from 'node:fs';
 import { wait, waitForNotification } from './helpers';
