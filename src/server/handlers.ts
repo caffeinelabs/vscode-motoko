@@ -1232,6 +1232,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         const { position } = event;
         const { uri } = event.textDocument;
 
+        // NOTE: isIncomplete=false means the client will filter the completion list
+        // client-side based on the typed prefix. This avoids recomputing the list
+        // on each keystroke, improving performance. The server returns all possible
+        // completions and lets the client handle prefix filtering.
         const list = CompletionList.create([], false);
         try {
             const doc = documents.get(uri);

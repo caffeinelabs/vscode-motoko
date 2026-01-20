@@ -74,16 +74,16 @@ describe('contextDot completion', () => {
         server.dispose();
     });
 
-    test('Map module completion', async () => {
-        const completion = await client.sendRequest<CompletionList>(
+    async function getCompletion(line: number, character: number) {
+        return await client.sendRequest<CompletionList>(
             'textDocument/completion',
             {
                 textDocument: {
                     uri: file.uri,
                 },
                 position: {
-                    line: 4,
-                    character: 16, // Position right after the dot in "let test1 = Map."
+                    line,
+                    character,
                 },
                 context: {
                     triggerKind: 2,
@@ -91,10 +91,40 @@ describe('contextDot completion', () => {
                 },
             },
         );
+    }
 
-        const completions = completion.items.map((item) => item.label);
-        expect(completions).toContain('empty');
-        expect(completions).toContain('add');
-        expect(completions).toContain('get');
+    test.each([
+        [4, 16],
+        [5, 17],
+        [6, 18],
+
+        [8, 26],
+        [9, 27],
+        [10, 28],
+
+        [12, 28],
+        [13, 28],
+        [14, 29],
+        [15, 29],
+        [16, 30],
+        [17, 30],
+
+        [19, 23],
+        [20, 23],
+        [21, 24],
+        [22, 24],
+        [23, 25],
+        [24, 25],
+    ])('map completions at %i:%i', async (line, character) => {
+        const completion = await getCompletion(line, character);
+        const labels = completion.items.map((item) => item.label);
+        expect(labels).toContain('empty');
+        expect(labels).toContain('add');
+        expect(labels).toContain('get');
+
+        completion.items.forEach((item) => {
+            // TODO: fix this path to be mo:core/Map.mo
+            expect(item.detail).toBe('.mops/core%402.0.0/src/Map.mo');
+        });
     });
 });
