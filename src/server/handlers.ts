@@ -1228,27 +1228,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return;
     }
 
-    function getLineAndCharacter(text: string, offset: number): Position {
-        if (offset < 0 || offset > text.length) {
-            throw new Error('Offset out of range');
-        }
-
-        let currentOffset = 0;
-        const lines = text.split('\n');
-        for (let line = 0; line < lines.length; line++) {
-            const lineLength = lines[line].length + 1; // +1 for the newline
-
-            if (currentOffset + lineLength > offset) {
-                const character = offset - currentOffset;
-                return { line, character };
-            }
-
-            currentOffset += lineLength;
-        }
-
-        throw new Error('Offset calculation failed');
-    }
-
     connection.onCompletion((event) => {
         const { position } = event;
         const { uri } = event.textDocument;
@@ -1257,13 +1236,15 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         try {
             const doc = documents.get(uri);
             if (!doc) return list;
-            const text = doc.getText();
             const context = getContext(uri);
             const status = context.astResolver.requestTyped(uri); // TODO: Synchronous Type Request blocking the event loop
             const program = status?.program;
             const offset = doc.offsetAt(position);
+            const prefix = doc.getText(
+                Range.create(Position.create(0, 0), position),
+            );
             const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/ // TODO: only works for identifiers, not `call().method` or `xs[0].m`
-                .exec(text.substring(0, offset))
+                .exec(prefix)
                 ?.slice(1) ?? ['', ''];
             if (!dot) {
                 let hadError = false;
@@ -1521,14 +1502,14 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 // Check for an identifier before the dot (e.g. `Module.abc`)
                 const end = offset - dot.length - identStart.length;
                 const preMatch = /(\s*\.\s*)?([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(
-                    text.substring(0, end),
+                    prefix.substring(0, end),
                 );
                 if (!preMatch) {
                     return list;
                 }
                 const [_preMatch, _preDot, preIdent] = preMatch;
                 const start = end - preIdent.length;
-                const indentPosition = getLineAndCharacter(text, start);
+                const indentPosition = doc.positionAt(start);
                 const definitions = findDefinitions(uri, indentPosition);
                 function completionsFromDefinition(definition: Definition) {
                     // HACK: Base modules seem to be contained inside an ExpD, so we
