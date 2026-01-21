@@ -190,7 +190,7 @@
         "dependency-graph": "^1.0.0",
         "execa": "4.1.0",
         "fast-glob": "3.2.12",
-        "ic-mops": "0.45.3",
+        "ic-mops": "2.0.1",
         "ic0": "0.3.1",
         "mnemonist": "0.39.5",
         "motoko": "3.17.1",
