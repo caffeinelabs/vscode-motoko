@@ -17,5 +17,9 @@
 			"path": "../node-motoko"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"[motoko]": {
+			"editor.formatOnSave": false
+		}
+	}
 }
