@@ -12,7 +12,7 @@ export interface AstStatus {
     ast?: AST;
     program?: Program;
     outdated: boolean;
-    sscope?: RawScope;
+    scope?: RawScope; // Accumulated scope with all imports
 }
 
 export interface AstImport {
@@ -104,7 +104,7 @@ export default class AstResolver {
                         );
                     ast = prog.ast;
                     immediateImports = prog.immediateImports;
-                    status.sscope = prog.sscope;
+                    status.scope = prog.scope;
                     this._scopeCache = scopeCache;
                 } else if (withDeps) {
                     try {
