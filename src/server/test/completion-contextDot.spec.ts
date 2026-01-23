@@ -118,7 +118,7 @@ describe('contextDot completion', () => {
     ])('map completions at %i:%i', async (line, character) => {
         const completion = await getCompletion(line, character);
         const labels = completion.items.map((item) => item.label);
-        expect(labels).toContain('empty');
+        expect(labels).not.toContain('empty'); // empty is not a context dot method (no self parameter)
         expect(labels).toContain('add');
         expect(labels).toContain('get');
 
