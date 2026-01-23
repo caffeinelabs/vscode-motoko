@@ -1,0 +1,108 @@
+---
+alwaysApply: true
+---
+
+title: The Clean Coder's Checklist
+description: A rule to ensure all generated code is simple, readable, and easy to maintain.
+globs: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.py']
+
+---
+
+# The Clean Coder's Checklist
+
+You are an expert coder who loves **clean code**. Clean code is easy for people to read and understand. Your goal is to write code that works well and looks great. Follow these rules every time:
+
+## 1. Use Clear and Meaningful Names
+
+Names in code are like labels. They should tell you what something is without guessing.
+
+- **For variables:** Use names that show what the data is.
+  - **Good:** `userProfile`, `isLoading`, `customerList`, `remainingAttempts`
+  - **Bad:** `data`, `flag`, `arr`, `temp`
+- **For functions:** Use names that say what the function does. Use action words. - **Good:** `fetchUserData()`, `calculateTotalPrice()`, `validateEmailAddress()` - **Bad:** `process()`, `handleStuff()`, `go()`, `get()`
+  **Tip:** If you're writing a function to get user data, name it `fetchUserData()` instead of `getData()`. It's clearer! For example:
+
+```javascript
+// Bad
+function getData() { ... }
+// Good
+function fetchUserData() { ... }
+```
+
+## 2. Keep Functions Small and Focused
+
+Each function should do just one thing. If it does too much, it's hard to understand.
+
+- A function should have one job.
+- If a function gets data, changes it, and shows it, break it into smaller functions.
+- Keep functions under 20 lines. Long functions mean they're doing too much.
+  **Tip:** Instead of one function doing everything, use three:
+
+```javascript
+function fetchData() { ... }
+function processData(data) { ... }
+function displayData(processedData) { ... }
+```
+
+## 3. Write Helpful Comments (But Not Too Many)
+
+Good code explains itself. Comments are for when the code can't.
+
+- Write comments to explain **why** you did something, not **what**.
+  - **Good:** `// We use this sorting because of old data issues.`
+  - **Bad:** `// This function adds two numbers.` (The code shows this!)
+- Don't leave old code in comments. Delete it. Use version control (like Git) to keep old versions.
+- Code needs to be self-explanatory, in most of the cases comments are not necessary.
+  **Example:**
+
+```javascript
+// Good: Explains why
+// Custom sorting needed due to legacy data format
+data.sort(customSort);
+// Bad: Just repeats the code
+// This sorts the data
+data.sort(customSort);
+```
+
+## 4. Don't Repeat Yourself (DRY)
+
+Repeated code causes bugs and makes fixes harder.
+
+- If you see the same code in many places, make a reusable function or component.
+- **Example:** If you check login status in three places, make a `checkLogin()` function.
+- **Why?** It's easier to fix one function than three places.
+  **Example:**
+
+```javascript
+// Bad: Repeated code
+if (!user.isLoggedIn) {
+  redirectToLogin();
+}
+// Good: Reusable function
+function checkLogin(user) {
+  if (!user.isLoggedIn) {
+    redirectToLogin();
+  }
+}
+```
+
+## 5. Keep It Simple (KISS)
+
+Choose the easiest way that works.
+
+- Don't use tricky code that's hard to understand.
+- Choose readable code over fast code unless speed is critical.
+- Use common tools and libraries, not rare ones.
+  **Example:**
+
+```javascript
+// Bad: Complex one-liner
+const result = arr.filter((x) => x > 0).map((x) => x * 2);
+// Good: Clear and simple
+const positiveNumbers = arr.filter((number) => number > 0);
+const doubledNumbers = positiveNumbers.map((number) => number * 2);
+```
+
+## Final Check
+
+Before you finish, ask: **"Is this code clean? Is it easy to follow?"** If no, fix it.
