@@ -4,7 +4,7 @@ import DepGraph from './depgraph';
 import { Context } from './context';
 import { Program, fromAST } from './syntax';
 import { resolveVirtualPath, tryGetFileText } from './utils';
-import { RawProg, RawScope } from 'motoko/lib';
+import { RawScope } from 'motoko/lib';
 
 export interface AstStatus {
     uri: string;
@@ -12,7 +12,6 @@ export interface AstStatus {
     ast?: AST;
     program?: Program;
     outdated: boolean;
-    prog?: RawProg;
     sscope?: RawScope;
 }
 
@@ -105,7 +104,6 @@ export default class AstResolver {
                         );
                     ast = prog.ast;
                     immediateImports = prog.immediateImports;
-                    status.prog = prog.prog;
                     status.sscope = prog.sscope;
                     this._scopeCache = scopeCache;
                 } else if (withDeps) {
