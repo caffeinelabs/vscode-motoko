@@ -122,7 +122,7 @@ export function findDocComments(
 
     const localDoc = findLocalDocComment(node);
     if (localDoc) {
-        docs.push(normalizeCodeBlocks(localDoc));
+        docs.push(preprocessDocComment(localDoc));
     }
 
     const definitions = findDefinitions(uri, position, true);
@@ -130,7 +130,7 @@ export function findDocComments(
     for (const definition of definitions) {
         const doc = findDocumentationForNode(definition.cursor);
         if (doc) {
-            docs.push(normalizeCodeBlocks(doc));
+            docs.push(preprocessDocComment(doc));
         }
     }
 
@@ -138,17 +138,21 @@ export function findDocComments(
 }
 
 /**
- * Normalizes documentation strings so hover previews always show clean Motoko code blocks.
+ * Preprocesses documentation strings so hover previews always show clean Motoko code blocks.
  * - Adds the `motoko` identifier when a block lacks a language hint.
  * - Strips qualifiers from Motoko fences (e.g. include=import, no-repl).
+ * - Removes Caffeine-specific deprecations.
  * @param doc The documentation string.
- * @returns The normalized documentation string.
+ * @returns The preprocessed documentation string.
  */
-function normalizeCodeBlocks(doc: string): string {
+function preprocessDocComment(doc: string): string {
     const lines = doc.split(/(\r?\n)/);
     let inCodeBlock = false;
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
+        if (!inCodeBlock && line == '@deprecated M0235') {
+            lines[i] = '';
+        }
         if (line.startsWith('```')) {
             if (!inCodeBlock) {
                 inCodeBlock = true;
