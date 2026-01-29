@@ -12,7 +12,7 @@
       "outFiles": [
         "${workspaceFolder}/out/**/*.js"
       ],
-      "preLaunchTask": "npm: compile"
+      "preLaunchTask": "npm: compile:dev"
     },
     {
       "name": "Run Extension with Local Motoko",
@@ -26,6 +26,19 @@
         "${workspaceFolder}/out/**/*.js"
       ],
       "preLaunchTask": "npm: compile:local:motoko"
+    },
+    {
+      "name": "Attach to Language Server",
+      "type": "node",
+      "request": "attach",
+      "port": 6005,
+      "sourceMaps": true,
+      "outFiles": [
+        "${workspaceFolder}/out/**/*.js"
+      ],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
     }
   ]
 }

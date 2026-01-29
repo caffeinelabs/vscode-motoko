@@ -1,4 +1,5 @@
 import {
+    CompletionItemKind,
     CompletionList,
     Connection,
     InitializeResult,
@@ -123,8 +124,11 @@ describe('contextDot completion', () => {
         expect(labels).toContain('get');
 
         completion.items.forEach((item) => {
-            // TODO: fix this path to be mo:core/Map.mo
-            expect(item.detail).toBe('.mops/core%402.0.0/src/Map.mo');
+            expect(item.detail).toContain('>(self : Map<K, '); // detail should be the type of the Map function
+            expect(item.kind).toBe(CompletionItemKind.Method);
+            expect(item.documentation?.toString()).toContain(
+                'From module: mo:core/Map',
+            );
         });
     });
 });
