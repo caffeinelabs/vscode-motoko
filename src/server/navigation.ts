@@ -134,6 +134,26 @@ export function findMostSpecificNodeForPosition(
     return node as (Node & { start: Span; end: Span }) | undefined;
 }
 
+export function findNodesForPosition(
+    ast: AST,
+    position: Position,
+    isMouseCursor = false,
+): Node[] {
+    return findNodes(
+        ast,
+        (node) =>
+            !node.file &&
+            node.start &&
+            node.end &&
+            position.line >= node.start[0] - 1 &&
+            position.line <= node.end[0] - 1 &&
+            (position.line !== node.start[0] - 1 ||
+                position.character >= node.start[1]) &&
+            (position.line !== node.end[0] - 1 ||
+                position.character < node.end[1] + (isMouseCursor ? 0 : 1)),
+    );
+}
+
 export function defaultRange(): Range {
     const pos = Position.create(0, 0);
     return Range.create(pos, pos);

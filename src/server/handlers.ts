@@ -70,6 +70,7 @@ import {
     locationFromDefinition,
     rangeFromNode,
     searchObject,
+    findNodesForPosition,
 } from './navigation';
 import { deployTemporary } from './deployer';
 import {
@@ -384,7 +385,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     }
                     if (extra.length) {
                         allContexts().forEach(({ motoko }) =>
-                            (motoko as any).setExtraFlags(extra),
+                            motoko.setExtraFlags(extra),
                         );
                     }
                 } catch (err) {
@@ -1247,9 +1248,55 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             const prefix = doc.getText(
                 Range.create(Position.create(0, 0), position),
             );
+            // Dot completions from compiler
+            let dotResolutions: {
+                name: string;
+                type: string;
+                moduleName?: string;
+            }[] = [];
+
+            if (program?.ast) {
+                // Find the most specific node at the cursor position
+                const cursorNodes = findNodesForPosition(
+                    program.ast,
+                    position,
+                ).filter((n) => n.name === 'DotE');
+                // TODO: there should be exactly one node.
+                for (const cursorNode of cursorNodes) {
+                    const receiverExp = matchNode(
+                        cursorNode,
+                        'DotE',
+                        (receiver: Node) => receiver,
+                    );
+                    const rawExp = receiverExp
+                        ? getRawExp(receiverExp)
+                        : undefined;
+                    if (receiverExp && rawExp && status?.scope) {
+                        dotResolutions = context.motoko.resolveDotCandidates(
+                            status.scope,
+                            rawExp,
+                        );
+                    }
+                }
+            }
             const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/ // TODO: only works for identifiers, not `call().method` or `xs[0].m`
                 .exec(prefix)
                 ?.slice(1) ?? ['', ''];
+
+            // Add dot completions from compiler's resolveDotCandidates
+            dotResolutions.forEach((candidate) => {
+                const documentation = candidate.moduleName
+                    ? `From module: ${candidate.moduleName}\n\n${candidate.type}`
+                    : undefined;
+                list.items.push({
+                    label: candidate.name,
+                    kind: CompletionItemKind.Method,
+                    detail: candidate.type, // TODO: the type should be instantiated to the receiver type
+                    documentation,
+                    insertText: candidate.name,
+                });
+            });
+
             if (!dot) {
                 let hadError = false;
                 context.importResolver
