@@ -184,7 +184,7 @@ export default class ImportResolver {
     }
 }
 
-function getImportName(path: string): string {
+export function getImportName(path: string): string {
     return pascalCase(/([^/]+)$/i.exec(path)?.[1] || '');
 }
 

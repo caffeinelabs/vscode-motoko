@@ -124,11 +124,27 @@ describe('contextDot completion', () => {
         expect(labels).toContain('get');
 
         completion.items.forEach((item) => {
-            expect(item.detail).toContain('>(self : Map<K, '); // detail should be the type of the Map function
             expect(item.kind).toBe(CompletionItemKind.Method);
-            expect(item.documentation?.toString()).toContain(
-                'From module: mo:core/Map',
-            );
         });
+
+        // Test Map function completions
+        completion.items
+            .filter((item) => item.label !== 'some')
+            .forEach((item) => {
+                expect(item.detail).toContain('>(self : Map<K, '); // detail should be the type of the Map function
+                expect(item.documentation?.toString()).toContain(
+                    'From module: mo:core/Map',
+                );
+            });
+
+        // Test other completions
+        completion.items
+            .filter((item) => item.label === 'some')
+            .forEach((item) => {
+                expect(item.additionalTextEdits?.length).toBe(1);
+                expect(item.additionalTextEdits![0].newText).toBe(
+                    `import Option "mo:core/Option";\n`,
+                ); // auto-import
+            });
     });
 });

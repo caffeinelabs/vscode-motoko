@@ -60,7 +60,7 @@ import {
     resetContexts,
 } from './context';
 import DfxResolver from './dfx';
-import { extractFields, organizeImports } from './imports';
+import { extractFields, getImportName, organizeImports } from './imports';
 import {
     startPosDesc,
     Definition,
@@ -1248,11 +1248,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             const prefix = doc.getText(
                 Range.create(Position.create(0, 0), position),
             );
-            // Dot completions from compiler
-            let dotResolutions: {
-                name: string;
-                type: string;
-                moduleName?: string;
+            let contextualSuggestions: {
+                moduleUrl: string;
+                funcName: string;
+                funcType: string;
             }[] = [];
 
             if (program?.ast) {
@@ -1272,10 +1271,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         ? getRawExp(receiverExp)
                         : undefined;
                     if (receiverExp && rawExp && status?.scope) {
-                        dotResolutions = context.motoko.resolveDotCandidates(
-                            status.scope,
-                            rawExp,
-                        );
+                        contextualSuggestions =
+                            context.motoko.contextualDotSuggestions(
+                                status.scope,
+                                rawExp,
+                            );
                     }
                 }
             }
@@ -1283,17 +1283,30 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 .exec(prefix)
                 ?.slice(1) ?? ['', ''];
 
-            // Add dot completions from compiler's resolveDotCandidates
-            dotResolutions.forEach((candidate) => {
-                const documentation = candidate.moduleName
-                    ? `From module: ${candidate.moduleName}\n\n${candidate.type}`
-                    : undefined;
+            // Add contextual dot suggestions with auto-import
+            contextualSuggestions.forEach((suggestion) => {
+                const existingImport = status?.program?.imports.find(
+                    (i) => i.path === suggestion.moduleUrl,
+                );
+                const textEdit = existingImport
+                    ? undefined
+                    : TextEdit.insert(
+                          findNewImportPosition(
+                              uri,
+                              context,
+                              suggestion.moduleUrl,
+                          ),
+                          `import ${getImportName(suggestion.moduleUrl)} "${
+                              suggestion.moduleUrl
+                          }";\n`,
+                      );
                 list.items.push({
-                    label: candidate.name,
+                    label: suggestion.funcName,
                     kind: CompletionItemKind.Method,
-                    detail: candidate.type, // TODO: the type should be instantiated to the receiver type
-                    documentation,
-                    insertText: candidate.name,
+                    detail: suggestion.funcType,
+                    documentation: `From module: ${suggestion.moduleUrl}`,
+                    insertText: suggestion.funcName,
+                    additionalTextEdits: textEdit ? [textEdit] : undefined,
                 });
             });
 
