@@ -1300,11 +1300,15 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                               suggestion.moduleUrl
                           }";\n`,
                       );
+                const field = context.importResolver.getField(
+                    suggestion.moduleUrl,
+                    suggestion.funcName,
+                );
                 list.items.push({
                     label: suggestion.funcName,
                     kind: CompletionItemKind.Method,
                     detail: suggestion.funcType,
-                    documentation: `From module: ${suggestion.moduleUrl}`,
+                    documentation: field?.documentation,
                     insertText: suggestion.funcName,
                     additionalTextEdits: textEdit ? [textEdit] : undefined,
                 });

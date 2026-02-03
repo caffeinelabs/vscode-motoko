@@ -22,7 +22,11 @@ export function extractFields(
             }
             const [dec, visibility] = field.args!;
             const doc = field.doc;
-            if (visibility !== 'Public') {
+            // visibility is 'Public' (string) or { name: 'Public', args: [...] } (for deprecated)
+            const isPublic =
+                visibility === 'Public' ||
+                (visibility as Node)?.name === 'Public';
+            if (!isPublic) {
                 return;
             }
             matchNode(dec, 'LetD', (pat: Node, exp: Node) => {
@@ -170,6 +174,17 @@ export default class ImportResolver {
     getFields(uri: string): CompletionItem[] {
         const fields = this._fieldMap.get(uri);
         return fields ? [...fields] : [];
+    }
+
+    /**
+     * Finds a specific importable field by label in a module.
+     * @param path Absolute import path (e.g. `mo:package/File`)
+     * @param label The field label to find
+     */
+    getField(path: string, label: string): CompletionItem | undefined {
+        const uri = this.getFileSystemURI(path);
+        if (!uri) return undefined;
+        return this.getFields(uri).find((f) => f.label === label);
     }
 
     /**

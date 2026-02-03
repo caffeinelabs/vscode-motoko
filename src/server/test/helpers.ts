@@ -1,4 +1,4 @@
-import { Connection } from 'vscode-languageserver/node';
+import { Connection, Diagnostic } from 'vscode-languageserver/node';
 import { InitializeResult } from 'vscode-languageclient/node';
 import { URI } from 'vscode-uri';
 import { clientInitParams, setupClientServer } from './mock';
@@ -23,6 +23,34 @@ export function waitForNotification<T>(
         conn.onNotification(name, (message: T) => {
             resolve(message);
         });
+    });
+}
+
+/**
+ * Waits for diagnostics to be published for a specific document URI.
+ * Set up the listener BEFORE triggering document changes.
+ */
+export function waitForDiagnostics(
+    client: Connection,
+    uri: string,
+    timeout: number = 10000,
+): Promise<Diagnostic[]> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            disposable.dispose();
+            reject(new Error(`Timeout waiting for diagnostics for ${uri}`));
+        }, timeout);
+
+        const disposable = client.onNotification(
+            'textDocument/publishDiagnostics',
+            (params: { uri: string; diagnostics: Diagnostic[] }) => {
+                if (params.uri === uri) {
+                    clearTimeout(timer);
+                    disposable.dispose();
+                    resolve(params.diagnostics);
+                }
+            },
+        );
     });
 }
 

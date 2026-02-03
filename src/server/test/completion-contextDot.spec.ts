@@ -8,7 +8,7 @@ import { URI } from 'vscode-uri';
 import { clientInitParams, setupClientServer } from './mock';
 import { cwd } from 'node:process';
 import { readFileSync } from 'node:fs';
-import { wait, waitForNotification } from './helpers';
+import { wait, waitForDiagnostics, waitForNotification } from './helpers';
 
 jest.setTimeout(60000);
 
@@ -48,6 +48,9 @@ describe('contextDot completion', () => {
 
         await serverInitialized;
 
+        // Set up listener before triggering document processing
+        const diagnosticsReceived = waitForDiagnostics(client, file.uri);
+
         await client.sendNotification('textDocument/didOpen', {
             textDocument: file.textDocument,
         });
@@ -65,7 +68,7 @@ describe('contextDot completion', () => {
             ],
         });
 
-        await wait(2); // Wait longer for Map module to be resolved
+        await diagnosticsReceived;
     });
 
     afterAll(async () => {
@@ -132,9 +135,6 @@ describe('contextDot completion', () => {
             .filter((item) => item.label !== 'some')
             .forEach((item) => {
                 expect(item.detail).toContain('>(self : Map<K, '); // detail should be the type of the Map function
-                expect(item.documentation?.toString()).toContain(
-                    'From module: mo:core/Map',
-                );
             });
 
         // Test other completions
@@ -145,6 +145,18 @@ describe('contextDot completion', () => {
                 expect(item.additionalTextEdits![0].newText).toBe(
                     `import Option "mo:core/Option";\n`,
                 ); // auto-import
+            });
+
+        // Test documentations
+        completion.items
+            .filter(
+                (item) =>
+                    item.label !== 'toArray' && item.label !== 'toVarArray',
+            ) // exclude functions without documentation
+            .forEach((item) => {
+                expect(item.documentation?.toString().length).toBeGreaterThan(
+                    30,
+                ); // doc comment should be substantial
             });
     });
 });
