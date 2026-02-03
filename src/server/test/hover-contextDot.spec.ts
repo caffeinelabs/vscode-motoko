@@ -1,4 +1,4 @@
-import { Connection, Hover } from 'vscode-languageserver/node';
+import { Connection, Hover, MarkupContent } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
 import { cwd } from 'node:process';
 import { readFileSync } from 'node:fs';
@@ -45,37 +45,28 @@ describe('contextDot hover', () => {
         });
         expect(hover).not.toBeNull();
         expect(hover.contents).toBeDefined();
-        const contents = hover.contents as unknown as {
-            kind: string;
-            value: string;
-        };
+        const contents = hover.contents as MarkupContent;
         return contents.value;
     }
 
-    test('hover on context dot method "size" shows correct type', async () => {
-        // let _size = obj.size();
-        //                 ^^^^
+    test('hover on context dot method "size" shows type and non-empty documentation', async () => {
         const contents = await getHoverContents(6, 17);
-        expect(contents).toBe(
-            '```motoko\n<K, V>(self : Map<K, V>) -> Nat\n```',
+        expect(contents).toMatch(
+            /^```motoko\n<K, V>\(self : Map<K, V>\) -> Nat\n```\n\n---\n\n[\s\S]+/,
         );
     });
 
-    test('hover on context dot method "get" shows correct type', async () => {
-        // let _result = obj.get("key");
-        //                   ^^^
+    test('hover on context dot method "get" shows type and non-empty documentation', async () => {
         const contents = await getHoverContents(7, 18);
-        expect(contents).toBe(
-            '```motoko\n<K, V>(self : Map<K, V>, compare : (implicit : (K, K) -> Order), key : K) -> ?V\n```',
+        expect(contents).toMatch(
+            /^```motoko\n<K, V>\(self : Map<K, V>, compare : \(implicit : \(K, K\) -> Order\), key : K\) -> \?V\n```\n\n---\n\n[\s\S]+/,
         );
     });
 
-    test('hover on receiver "obj" shows Map type', async () => {
-        // let _size = obj.size();
-        //             ^^^
+    test('hover on receiver "obj" shows Map type and non-empty documentation', async () => {
         const contents = await getHoverContents(6, 13);
-        expect(contents).toBe(
-            '```motoko\n{ var root : Node<Text, Nat>; var size : Nat }\n```',
+        expect(contents).toMatch(
+            /^```motoko\n\{ var root : Node<Text, Nat>; var size : Nat \}\n```\n\n---\n\n[\s\S]+/,
         );
     });
 });

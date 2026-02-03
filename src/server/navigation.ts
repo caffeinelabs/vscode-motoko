@@ -1,4 +1,5 @@
-import { AST, Node, Span } from 'motoko/lib/ast';
+import { AST, Node, Span, getRawExp } from 'motoko/lib/ast';
+import { RawScope } from 'motoko/lib';
 import { Location, Position, Range } from 'vscode-languageserver';
 import { URI } from 'vscode-uri';
 import { Context, getContext } from './context';
@@ -277,6 +278,13 @@ export function findDefinitions(
         return [];
     }
     const reference: Reference = { uri, node };
+
+    // Try context dot resolution for DotE nodes
+    const contextDotDef = tryContextDotDefinition(context, node, status.scope);
+    if (contextDotDef) {
+        return [contextDotDef];
+    }
+
     const importDefinition = followImport(context, reference);
     if (importDefinition) {
         return [importDefinition];
@@ -303,6 +311,47 @@ export function findDefinitions(
         );
     }
     return definitions;
+}
+
+/**
+ * Try to resolve a context dot method to its module definition.
+ * For `obj.method(...)` calls, this finds the function in the source module.
+ */
+function tryContextDotDefinition(
+    context: Context,
+    node: Node,
+    scope: RawScope | undefined,
+): Definition | undefined {
+    if (!scope) return undefined;
+
+    // Extract receiver and method name from DotE
+    const dotInfo = matchNode(node, 'DotE', (receiver: Node, id: Node) => ({
+        receiver,
+        methodName: getIdName(id),
+    }));
+    if (!dotInfo?.methodName) return undefined;
+
+    const rawExp = getRawExp(dotInfo.receiver);
+    if (!rawExp) return undefined;
+
+    // Find matching context dot suggestion
+    // TODO: add another motoko method that simply gets the cached resolved module uri from the context dot DotE exp
+    const suggestions = context.motoko.contextualDotSuggestions(scope, rawExp);
+    const match = suggestions.find((s) => s.funcName === dotInfo.methodName);
+    if (!match) return undefined;
+
+    // Resolve module URI and find function definition
+    const moduleUri = context.importResolver.getFileSystemURI(match.moduleUrl);
+    if (!moduleUri) return undefined;
+
+    const moduleStatus = context.astResolver.request(moduleUri, false);
+    const exportNode = asNode(moduleStatus?.program?.export?.ast);
+    if (!exportNode) return undefined;
+
+    return searchObject(
+        { uri: moduleUri, node: exportNode },
+        { type: 'variable', name: match.funcName },
+    );
 }
 
 function searchTypeFromIdContext(node: Node): 'variable' | 'type' {
