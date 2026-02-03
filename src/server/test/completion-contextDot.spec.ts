@@ -2,13 +2,11 @@ import {
     CompletionItemKind,
     CompletionList,
     Connection,
-    InitializeResult,
 } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
-import { clientInitParams, setupClientServer } from './mock';
 import { cwd } from 'node:process';
 import { readFileSync } from 'node:fs';
-import { wait, waitForDiagnostics, waitForNotification } from './helpers';
+import { defaultAfterAll, setupWithDocument, TestFile } from './helpers';
 
 jest.setTimeout(60000);
 
@@ -17,7 +15,7 @@ const rootUri = URI.file(rootPath);
 const filePath = `${rootPath}/test/completion`;
 const text = readFileSync(`${filePath}/contextDot.mo`, 'utf-8');
 
-const file = {
+const file: TestFile = {
     uri: `${rootUri}/test/completion/contextDot.mo`,
     textDocument: {
         uri: `${rootUri}/test/completion/contextDot.mo`,
@@ -32,50 +30,11 @@ describe('contextDot completion', () => {
     let server: Connection;
 
     beforeAll(async () => {
-        [client, server] = setupClientServer(true);
-
-        const serverInitialized = waitForNotification(
-            'custom/initialized',
-            client,
-        );
-
-        await client.sendRequest<InitializeResult>(
-            'initialize',
-            clientInitParams(rootUri),
-        );
-
-        await client.sendNotification('initialized', {});
-
-        await serverInitialized;
-
-        // Set up listener before triggering document processing
-        const diagnosticsReceived = waitForDiagnostics(client, file.uri);
-
-        await client.sendNotification('textDocument/didOpen', {
-            textDocument: file.textDocument,
-        });
-
-        // Send didChange to ensure the file is processed
-        await client.sendNotification('textDocument/didChange', {
-            textDocument: {
-                uri: file.uri,
-                version: 2,
-            },
-            contentChanges: [
-                {
-                    text: text,
-                },
-            ],
-        });
-
-        await diagnosticsReceived;
+        [client, server] = await setupWithDocument(rootUri, file);
     });
 
     afterAll(async () => {
-        await client.sendRequest('shutdown');
-        await wait(2);
-        client.dispose();
-        server.dispose();
+        await defaultAfterAll(client, server);
     });
 
     async function getCompletion(line: number, character: number) {

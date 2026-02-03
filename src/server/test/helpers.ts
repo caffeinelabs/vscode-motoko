@@ -112,10 +112,47 @@ export async function defaultBeforeAll(
 
 export async function defaultAfterAll(
     client: Connection,
-    _server: Connection,
+    server: Connection,
 ): Promise<void> {
     await client.sendRequest('shutdown');
     await wait(2);
+    client.dispose();
+    server.dispose();
+}
+
+export interface TestFile {
+    uri: string;
+    textDocument: TextDocument;
+}
+
+/**
+ * Sets up client/server, opens a document, and waits for diagnostics.
+ * Use this for tests that need a fully initialized document.
+ */
+export async function setupWithDocument(
+    rootUri: URI,
+    file: TestFile,
+    redirectConsole: boolean = true,
+): Promise<[Connection, Connection]> {
+    const [client, server] = await defaultBeforeAll(rootUri, redirectConsole);
+
+    const diagnosticsReceived = waitForDiagnostics(client, file.uri);
+
+    await client.sendNotification('textDocument/didOpen', {
+        textDocument: file.textDocument,
+    });
+
+    await client.sendNotification('textDocument/didChange', {
+        textDocument: {
+            uri: file.uri,
+            version: 2,
+        },
+        contentChanges: [{ text: file.textDocument.text }],
+    });
+
+    await diagnosticsReceived;
+
+    return [client, server];
 }
 
 export async function openTextDocuments(
