@@ -5,7 +5,7 @@ import * as semver from 'semver';
 import * as glob from 'fast-glob';
 import { existsSync, readFileSync } from 'fs';
 import { add as mopsAdd } from 'ic-mops/commands/add';
-import { AST, Node, Span, getRawExp } from 'motoko/lib/ast';
+import { AST, Node, Span } from 'motoko/lib/ast';
 import { keywords } from 'motoko/lib/keywords';
 import * as baseLibrary from 'motoko/packages/latest/base.json';
 import { join, resolve } from 'path';
@@ -1267,15 +1267,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         'DotE',
                         (receiver: Node) => receiver,
                     );
-                    const rawExp = receiverExp
-                        ? getRawExp(receiverExp)
-                        : undefined;
-                    if (receiverExp && rawExp && status?.scope) {
+                    if (receiverExp) {
                         contextualSuggestions =
                             context.motoko.contextualDotSuggestions(
-                                status.scope,
-                                rawExp,
-                            );
+                                receiverExp,
+                            ) ?? [];
                     }
                 }
             }
