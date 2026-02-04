@@ -1991,5 +1991,20 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         checkWorkspace();
     });
 
+    connection.onShutdown(() => {
+        // Prevent new checks from being scheduled
+        disableChecks = true;
+
+        // Clear all pending timeouts to prevent operations on disposed connection
+        clearTimeout(checkTimeout);
+        clearTimeout(checkWorkspaceTimeout);
+        clearTimeout(packageConfigChangeTimeout);
+        clearTimeout(dfxChangeTimeout);
+        clearTimeout(validatingTimeout);
+
+        // Clear the check queue
+        checkQueue.length = 0;
+    });
+
     documents.listen(connection);
 };

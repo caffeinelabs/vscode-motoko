@@ -5,45 +5,39 @@ import {
 } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
 import { cwd } from 'node:process';
-import { readFileSync } from 'node:fs';
-import { defaultAfterAll, setupWithDocument, TestFile } from './helpers';
+import {
+    defaultAfterAll,
+    defaultBeforeAll,
+    openTextDocument,
+    TextDocument,
+} from './helpers';
+import { join } from 'node:path';
 
+const rootPath = join(cwd(), 'test', 'completion');
+const rootUri = URI.parse(rootPath);
 jest.setTimeout(60000);
 
-const rootPath = cwd();
-const rootUri = URI.file(rootPath);
-const filePath = `${rootPath}/test/completion`;
-const text = readFileSync(`${filePath}/contextDot.mo`, 'utf-8');
-
-const file: TestFile = {
-    uri: `${rootUri}/test/completion/contextDot.mo`,
-    textDocument: {
-        uri: `${rootUri}/test/completion/contextDot.mo`,
-        languageId: 'motoko',
-        version: 1,
-        text: text,
-    },
-};
+const fileUri = URI.parse(join(rootPath, 'contextDot.mo')).toString();
 
 describe('contextDot completion', () => {
     let client: Connection;
     let server: Connection;
 
-    beforeAll(async () => {
-        [client, server] = await setupWithDocument(rootUri, file);
-    });
+    let textDocument: TextDocument;
 
-    afterAll(async () => {
-        await defaultAfterAll(client, server);
+    beforeAll(async () => {
+        [client, server] = await defaultBeforeAll(rootUri, true, {
+            useDefaultMocJs: true,
+        });
+        textDocument = await openTextDocument(client, rootUri, fileUri);
     });
+    afterAll(async () => await defaultAfterAll(client, server));
 
     async function getCompletion(line: number, character: number) {
         return await client.sendRequest<CompletionList>(
             'textDocument/completion',
             {
-                textDocument: {
-                    uri: file.uri,
-                },
+                textDocument,
                 position: {
                     line,
                     character,

@@ -1,46 +1,40 @@
 import { Connection, Hover, MarkupContent } from 'vscode-languageserver/node';
 import { URI } from 'vscode-uri';
 import { cwd } from 'node:process';
-import { readFileSync } from 'node:fs';
-import { defaultAfterAll, setupWithDocument, TestFile } from './helpers';
+import {
+    defaultAfterAll,
+    defaultBeforeAll,
+    openTextDocument,
+    TextDocument,
+} from './helpers';
+import { join } from 'node:path';
 
+const rootPath = join(cwd(), 'test', 'hover');
+const rootUri = URI.parse(rootPath);
 jest.setTimeout(60000);
 
-const rootPath = cwd();
-const rootUri = URI.file(rootPath);
-const filePath = `${rootPath}/test/hover`;
-const text = readFileSync(`${filePath}/ContextDot.mo`, 'utf-8');
-
-const file: TestFile = {
-    uri: `${rootUri}/test/hover/ContextDot.mo`,
-    textDocument: {
-        uri: `${rootUri}/test/hover/ContextDot.mo`,
-        languageId: 'motoko',
-        version: 1,
-        text: text,
-    },
-};
+const fileUri = URI.parse(join(rootPath, 'ContextDot.mo')).toString();
 
 describe('contextDot hover', () => {
     let client: Connection;
     let server: Connection;
 
-    beforeAll(async () => {
-        [client, server] = await setupWithDocument(rootUri, file);
-    });
+    let textDocument: TextDocument;
 
-    afterAll(async () => {
-        await defaultAfterAll(client, server);
+    beforeAll(async () => {
+        [client, server] = await defaultBeforeAll(rootUri, true, {
+            useDefaultMocJs: true,
+        });
+        textDocument = await openTextDocument(client, rootUri, fileUri);
     });
+    afterAll(async () => await defaultAfterAll(client, server));
 
     async function getHoverContents(
         line: number,
         character: number,
     ): Promise<string> {
         const hover = await client.sendRequest<Hover>('textDocument/hover', {
-            textDocument: {
-                uri: file.uri,
-            },
+            textDocument,
             position: { line, character },
         });
         expect(hover).not.toBeNull();

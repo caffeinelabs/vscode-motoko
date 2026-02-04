@@ -120,41 +120,6 @@ export async function defaultAfterAll(
     server.dispose();
 }
 
-export interface TestFile {
-    uri: string;
-    textDocument: TextDocument;
-}
-
-/**
- * Sets up client/server, opens a document, and waits for diagnostics.
- * Use this for tests that need a fully initialized document.
- */
-export async function setupWithDocument(
-    rootUri: URI,
-    file: TestFile,
-    redirectConsole: boolean = true,
-): Promise<[Connection, Connection]> {
-    const [client, server] = await defaultBeforeAll(rootUri, redirectConsole);
-
-    const diagnosticsReceived = waitForDiagnostics(client, file.uri);
-
-    await client.sendNotification('textDocument/didOpen', {
-        textDocument: file.textDocument,
-    });
-
-    await client.sendNotification('textDocument/didChange', {
-        textDocument: {
-            uri: file.uri,
-            version: 2,
-        },
-        contentChanges: [{ text: file.textDocument.text }],
-    });
-
-    await diagnosticsReceived;
-
-    return [client, server];
-}
-
 export async function openTextDocuments(
     client: Connection,
     textDocuments: Map<string, TextDocument>,
@@ -164,15 +129,28 @@ export async function openTextDocuments(
     await Promise.all(
         uris.map(async (uri) => {
             if (!textDocuments.has(uri)) {
-                const basename = uri.startsWith(rootUri.toString())
-                    ? uri.slice(rootUri.toString().length)
-                    : uri;
-                const textDocument = makeTextDocument(rootUri, basename);
+                const textDocument = await openTextDocument(
+                    client,
+                    rootUri,
+                    uri,
+                );
                 textDocuments.set(uri, textDocument);
-                await client.sendNotification('textDocument/didOpen', {
-                    textDocument,
-                });
             }
         }),
     );
+}
+
+export async function openTextDocument(
+    client: Connection,
+    rootUri: URI,
+    uri: string,
+): Promise<TextDocument> {
+    const basename = uri.startsWith(rootUri.toString())
+        ? uri.slice(rootUri.toString().length)
+        : uri;
+    const textDocument = makeTextDocument(rootUri, basename);
+    await client.sendNotification('textDocument/didOpen', {
+        textDocument,
+    });
+    return textDocument;
 }
