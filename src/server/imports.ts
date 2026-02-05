@@ -1,7 +1,11 @@
 import { pascalCase } from 'change-case';
 import { MultiMap } from 'mnemonist';
 import { AST, Node } from 'motoko/lib/ast';
-import { CompletionItemKind, CompletionItem } from 'vscode-languageserver/node';
+import {
+    CompletionItemKind,
+    CompletionItem,
+    Position,
+} from 'vscode-languageserver/node';
 import { Context, getContext } from './context';
 import { Import, Program, getIdName, matchNode } from './syntax';
 import { formatMotoko, getRelativeUri } from './utils';
@@ -305,4 +309,51 @@ export function organizeImports(imports: Import[]): string {
         });
 
     return formatMotoko(groupParts.map((p) => p.join('\n')).join('\n\n'));
+}
+
+/**
+ * Finds the position where a new import should be inserted.
+ * @param imports The existing imports in the program
+ * @param importPath The path of the import to add
+ * @returns The position where the new import should be inserted
+ */
+export function findImportInsertPosition(
+    imports: Import[] | undefined,
+    importPath: string,
+): Position {
+    if (!imports?.length) {
+        return Position.create(0, 0);
+    }
+
+    let lastImport = imports[imports.length - 1];
+
+    // add after last import from the same package
+    if (importPath.startsWith('mo:')) {
+        const importsReversed = imports.slice().reverse();
+        const packagePrefix = importPath.split('/')[0];
+
+        const lastSamePackageImport = importsReversed.find((imprt) => {
+            return (
+                imprt.path === packagePrefix ||
+                imprt.path.startsWith(`${packagePrefix}/`)
+            );
+        });
+        if (lastSamePackageImport) {
+            lastImport = lastSamePackageImport;
+        } else {
+            // add after last package import
+            const lastPackageImport = importsReversed.find((imprt) => {
+                return imprt.path.startsWith('mo:');
+            });
+            if (lastPackageImport) {
+                lastImport = lastPackageImport;
+            }
+        }
+    }
+
+    const end = (lastImport.ast as Node)?.end;
+    if (end) {
+        return Position.create(end[0], 0);
+    }
+    return Position.create(0, 0);
 }

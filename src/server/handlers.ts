@@ -59,8 +59,13 @@ import {
     getContext,
     resetContexts,
 } from './context';
+import { addContextualDotCompletions } from './completions';
 import DfxResolver from './dfx';
-import { extractFields, getImportName, organizeImports } from './imports';
+import {
+    extractFields,
+    findImportInsertPosition,
+    organizeImports,
+} from './imports';
 import {
     startPosDesc,
     Definition,
@@ -70,13 +75,11 @@ import {
     locationFromDefinition,
     rangeFromNode,
     searchObject,
-    findMostSpecificNodeForPosition,
 } from './navigation';
 import { deployTemporary } from './deployer';
 import {
     Class,
     Field,
-    Import,
     ObjBlock,
     Program,
     SyntaxWithFields,
@@ -582,7 +585,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         }, 1000);
     }
 
-    // TODO: refactor
     function findNewImportPosition(
         uri: string,
         context: Context,
@@ -592,40 +594,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             uri,
             isVirtualFileSystemReady,
         )?.program?.imports;
-        if (imports?.length) {
-            let lastImport = imports[imports.length - 1];
-
-            // add after last import from the same package
-            if (importPath.startsWith('mo:')) {
-                const importsReversed = imports.slice().reverse();
-                importPath = importPath.split('/')[0];
-
-                const lastSamePackageImport: Import | undefined =
-                    importsReversed.find((imprt) => {
-                        return (
-                            imprt.path === importPath ||
-                            imprt.path.startsWith(`${importPath}/`)
-                        );
-                    });
-                if (lastSamePackageImport) {
-                    lastImport = lastSamePackageImport;
-                } else {
-                    // add after last package import
-                    const lastPackageImport = importsReversed.find((imprt) => {
-                        return imprt.path.startsWith('mo:');
-                    });
-                    if (lastPackageImport) {
-                        lastImport = lastPackageImport;
-                    }
-                }
-            }
-
-            const end = (lastImport.ast as Node)?.end;
-            if (end) {
-                return Position.create(end[0], 0);
-            }
-        }
-        return Position.create(0, 0);
+        return findImportInsertPosition(imports, importPath);
     }
 
     if (redirectConsole) {
@@ -1254,69 +1223,23 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             const context = getContext(uri);
             const status = context.astResolver.requestTyped(uri);
             const program = status?.program;
+
+            if (program) {
+                addContextualDotCompletions(
+                    list.items,
+                    program,
+                    context,
+                    position,
+                );
+            }
+
             const offset = doc.offsetAt(position);
             const prefix = doc.getText(
                 Range.create(Position.create(0, 0), position),
             );
-            let contextualSuggestions: {
-                moduleUri: string;
-                funcName: string;
-                funcType: string;
-            }[] = [];
-
-            if (program?.ast) {
-                const cursorNode = findMostSpecificNodeForPosition(
-                    program.ast,
-                    position,
-                    (n) => n.name === 'DotE',
-                    +1, // When typing a field the AST is sometimes missing the last character, compensate for that
-                );
-                const receiverExp = matchNode(
-                    cursorNode,
-                    'DotE',
-                    (receiver: Node) => receiver,
-                );
-                if (receiverExp) {
-                    contextualSuggestions =
-                        context.motoko.contextualDotSuggestions(receiverExp) ??
-                        [];
-                }
-            }
             const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/ // TODO: only works for identifiers, not `call().method` or `xs[0].m`
                 .exec(prefix)
                 ?.slice(1) ?? ['', ''];
-
-            // Add contextual dot suggestions with auto-import
-            contextualSuggestions.forEach((suggestion) => {
-                const existingImport = status?.program?.imports.find(
-                    (i) => i.path === suggestion.moduleUri,
-                );
-                const textEdit = existingImport
-                    ? undefined
-                    : TextEdit.insert(
-                          findNewImportPosition(
-                              uri,
-                              context,
-                              suggestion.moduleUri,
-                          ),
-                          `import ${getImportName(suggestion.moduleUri)} "${
-                              suggestion.moduleUri
-                          }";\n`,
-                      );
-                const field = context.importResolver.getField(
-                    suggestion.moduleUri,
-                    suggestion.funcName,
-                );
-                list.items.push({
-                    label: suggestion.funcName,
-                    kind: CompletionItemKind.Method,
-                    detail: suggestion.funcType,
-                    documentation: field?.documentation,
-                    insertText: suggestion.funcName,
-                    additionalTextEdits: textEdit ? [textEdit] : undefined,
-                });
-            });
-
             if (!dot) {
                 let hadError = false;
                 context.importResolver
@@ -1331,7 +1254,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                     (i) =>
                                         i.name === name ||
                                         i.fields.some(
-                                            ([, alias]) => alias === name,
+                                            ([, alias]) => alias === name, // TODO: extract common with context dot
                                         ),
                                 );
                             if (existingImport || !status?.program) {
@@ -1340,7 +1263,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                             }
                             const edits: TextEdit[] = [
                                 TextEdit.insert(
-                                    findNewImportPosition(uri, context, path),
+                                    findNewImportPosition(uri, context, path), // TODO: extract common with context dot
                                     `import ${name} "${path}";\n`,
                                 ),
                             ];

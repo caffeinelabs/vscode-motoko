@@ -259,7 +259,6 @@ export function findDefinitions(
     }
     const reference: Reference = { uri, node };
 
-    // Try context dot resolution for DotE nodes
     const contextDotDef = tryContextDotDefinition(
         context,
         node,
