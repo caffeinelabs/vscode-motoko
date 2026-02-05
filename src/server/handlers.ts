@@ -62,8 +62,10 @@ import {
 import { addContextualDotCompletions } from './completions';
 import DfxResolver from './dfx';
 import {
+    importTextEdit,
     extractFields,
     findImportInsertPosition,
+    hasImportWithName,
     organizeImports,
 } from './imports';
 import {
@@ -1246,26 +1248,19 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     .getNameEntries()
                     .forEach(([name, importPath]) => {
                         try {
-                            const path = importPath.startsWith('mo:')
-                                ? importPath
-                                : getRelativeUri(uri, importPath);
-                            const existingImport =
-                                status?.program?.imports.find(
-                                    (i) =>
-                                        i.name === name ||
-                                        i.fields.some(
-                                            ([, alias]) => alias === name, // TODO: extract common with context dot
-                                        ),
-                                );
-                            if (existingImport || !status?.program) {
+                            const program = status?.program;
+                            if (
+                                !program ||
+                                hasImportWithName(program.imports, name)
+                            ) {
                                 // Skip alternatives with already imported name
                                 return;
                             }
+                            const path = importPath.startsWith('mo:')
+                                ? importPath
+                                : getRelativeUri(uri, importPath);
                             const edits: TextEdit[] = [
-                                TextEdit.insert(
-                                    findNewImportPosition(uri, context, path), // TODO: extract common with context dot
-                                    `import ${name} "${path}";\n`,
-                                ),
+                                importTextEdit(program.imports, name, path),
                             ];
                             list.items.push({
                                 label: name,

@@ -3,11 +3,10 @@ import {
     CompletionItem,
     CompletionItemKind,
     Position,
-    TextEdit,
 } from 'vscode-languageserver/node';
 
 import { Context } from './context';
-import { findImportInsertPosition, getImportName } from './imports';
+import { getImportName, hasImportWithPath, importTextEdit } from './imports';
 import { findMostSpecificNodeForPosition } from './navigation';
 import { matchNode, Program } from './syntax';
 
@@ -34,20 +33,16 @@ export function addContextualDotCompletions(
     context.motoko
         .contextualDotSuggestions(receiverExp)
         ?.forEach((suggestion) => {
-            const existingImport = program.imports.find(
-                (i) => i.path === suggestion.moduleUri,
-            );
-            const additionalTextEdits = existingImport
+            const additionalTextEdits = hasImportWithPath(
+                program.imports,
+                suggestion.moduleUri,
+            )
                 ? undefined
                 : [
-                      TextEdit.insert(
-                          findImportInsertPosition(
-                              program.imports,
-                              suggestion.moduleUri,
-                          ),
-                          `import ${getImportName(suggestion.moduleUri)} "${
-                              suggestion.moduleUri
-                          }";\n`,
+                      importTextEdit(
+                          program.imports,
+                          getImportName(suggestion.moduleUri),
+                          suggestion.moduleUri,
                       ),
                   ];
             const field = context.importResolver.getField(

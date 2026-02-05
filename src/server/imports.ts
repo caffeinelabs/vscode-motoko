@@ -5,6 +5,7 @@ import {
     CompletionItemKind,
     CompletionItem,
     Position,
+    TextEdit,
 } from 'vscode-languageserver/node';
 import { Context, getContext } from './context';
 import { Import, Program, getIdName, matchNode } from './syntax';
@@ -356,4 +357,43 @@ export function findImportInsertPosition(
         return Position.create(end[0], 0);
     }
     return Position.create(0, 0);
+}
+
+/**
+ * Checks if an import with the given name already exists.
+ * Matches against module name or field alias.
+ */
+export function hasImportWithName(
+    imports: Import[] | undefined,
+    name: string,
+): boolean {
+    if (!imports) return false;
+    return imports.some(
+        (i) => i.name === name || i.fields.some(([, alias]) => alias === name),
+    );
+}
+
+/**
+ * Checks if an import with the given path already exists.
+ */
+export function hasImportWithPath(
+    imports: Import[] | undefined,
+    path: string,
+): boolean {
+    if (!imports) return false;
+    return imports.some((i) => i.path === path);
+}
+
+/**
+ * Creates a TextEdit for adding a new import.
+ */
+export function importTextEdit(
+    imports: Import[] | undefined,
+    name: string,
+    path: string,
+): TextEdit {
+    return TextEdit.insert(
+        findImportInsertPosition(imports, path),
+        `import ${name} "${path}";\n`,
+    );
 }
