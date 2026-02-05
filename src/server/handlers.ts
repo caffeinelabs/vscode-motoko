@@ -384,9 +384,19 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         extra.push(...settings.extraFlags);
                     }
                     if (extra.length) {
-                        allContexts().forEach(({ motoko }) =>
-                            motoko.setExtraFlags(extra),
-                        );
+                        allContexts().forEach(({ motoko, mocJsInfo }) => {
+                            const version = mocJsInfo.version;
+                            if (
+                                version &&
+                                semver.valid(version) &&
+                                semver.lte(version, '1.1.0')
+                            ) {
+                                console.warn(
+                                    `Motoko version ${version} may not support all extra flags. Invalid or unsupported flags can cause the extension to crash.`,
+                                );
+                            }
+                            motoko.setExtraFlags(extra);
+                        });
                     }
                 } catch (err) {
                     console.warn('Failed to apply extra flags:', err);
@@ -1242,7 +1252,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             const doc = documents.get(uri);
             if (!doc) return list;
             const context = getContext(uri);
-            const status = context.astResolver.requestTyped(uri); // TODO: Synchronous Type Request blocking the event loop
+            const status = context.astResolver.requestTyped(uri);
             const program = status?.program;
             const offset = doc.offsetAt(position);
             const prefix = doc.getText(
@@ -1259,6 +1269,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     program.ast,
                     position,
                     (n) => n.name === 'DotE',
+                    +1, // When typing a field the AST is sometimes missing the last character, compensate for that
                 );
                 const receiverExp = matchNode(
                     cursorNode,
