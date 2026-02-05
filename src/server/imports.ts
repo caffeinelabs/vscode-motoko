@@ -22,7 +22,7 @@ export function extractFields(
             }
             const [dec, visibility] = field.args!;
             const doc = field.doc;
-            // visibility is 'Public' (string) or { name: 'Public', args: [...] } (for deprecated)
+            // visibility is 'Public' (string) or { name: 'Public', args: [...] } (for @deprecated annotation)
             const isPublic =
                 visibility === 'Public' ||
                 (visibility as Node)?.name === 'Public';
@@ -178,23 +178,23 @@ export default class ImportResolver {
 
     /**
      * Finds a specific importable field by label in a module.
-     * @param path Absolute import path (e.g. `mo:package/File`)
+     * @param uri Absolute file import URI (e.g. `mo:package/File`, `canister:alias`, `file:///Lib`)
      * @param label The field label to find
      */
-    getField(path: string, label: string): CompletionItem | undefined {
-        const uri = this.getFileSystemURI(path);
-        if (!uri) return undefined;
-        return this.getFields(uri).find((f) => f.label === label);
+    getField(uri: string, label: string): CompletionItem | undefined {
+        const fsUri = this.getFileSystemURI(uri);
+        if (!fsUri) return undefined;
+        return this.getFields(fsUri).find((f) => f.label === label);
     }
 
     /**
      * Converts a resolved import path into the corresponding file system URI.
      * @param uri Absolute file import URI (e.g. `mo:package/File`, `canister:alias`, `file:///Lib`)
      */
-    getFileSystemURI(path: string): string | undefined {
+    getFileSystemURI(uri: string): string | undefined {
         return (
-            this._fileSystemMap.get(path) ||
-            this._fileSystemMap.get(`${path}/lib`)
+            this._fileSystemMap.get(uri) ||
+            this._fileSystemMap.get(`${uri}/lib`)
         );
     }
 }

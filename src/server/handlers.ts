@@ -1249,7 +1249,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 Range.create(Position.create(0, 0), position),
             );
             let contextualSuggestions: {
-                moduleUrl: string;
+                moduleUri: string;
                 funcName: string;
                 funcType: string;
             }[] = [];
@@ -1278,7 +1278,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             // Add contextual dot suggestions with auto-import
             contextualSuggestions.forEach((suggestion) => {
                 const existingImport = status?.program?.imports.find(
-                    (i) => i.path === suggestion.moduleUrl,
+                    (i) => i.path === suggestion.moduleUri,
                 );
                 const textEdit = existingImport
                     ? undefined
@@ -1286,14 +1286,14 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                           findNewImportPosition(
                               uri,
                               context,
-                              suggestion.moduleUrl,
+                              suggestion.moduleUri,
                           ),
-                          `import ${getImportName(suggestion.moduleUrl)} "${
-                              suggestion.moduleUrl
+                          `import ${getImportName(suggestion.moduleUri)} "${
+                              suggestion.moduleUri
                           }";\n`,
                       );
                 const field = context.importResolver.getField(
-                    suggestion.moduleUrl,
+                    suggestion.moduleUri,
                     suggestion.funcName,
                 );
                 list.items.push({

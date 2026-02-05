@@ -8,6 +8,7 @@ import {
     matchNode,
     asNode,
     findInPattern,
+    Program,
 } from './syntax';
 import { getAbsoluteUri, LocationSet } from './utils';
 
@@ -106,6 +107,7 @@ export function findMostSpecificNodeForPosition(
             (position.line !== node.start[0] - 1 ||
                 position.character >= node.start[1]) &&
             (position.line !== node.end[0] - 1 ||
+                // TODO: when typing fast it seems sometimes this condition does not catch the expression and we get nothing
                 position.character < node.end[1] + (isMouseCursor ? 0 : 1)),
     );
 
@@ -132,26 +134,6 @@ export function findMostSpecificNodeForPosition(
         }
     });
     return node as (Node & { start: Span; end: Span }) | undefined;
-}
-
-export function findNodesForPosition(
-    ast: AST,
-    position: Position,
-    isMouseCursor = false,
-): Node[] {
-    return findNodes(
-        ast,
-        (node) =>
-            !node.file &&
-            node.start &&
-            node.end &&
-            position.line >= node.start[0] - 1 &&
-            position.line <= node.end[0] - 1 &&
-            (position.line !== node.start[0] - 1 ||
-                position.character >= node.start[1]) &&
-            (position.line !== node.end[0] - 1 ||
-                position.character <= node.end[1] + (isMouseCursor ? 0 : 1)),
-    );
 }
 
 export function defaultRange(): Range {
@@ -279,7 +261,11 @@ export function findDefinitions(
     const reference: Reference = { uri, node };
 
     // Try context dot resolution for DotE nodes
-    const contextDotDef = tryContextDotDefinition(context, node);
+    const contextDotDef = tryContextDotDefinition(
+        context,
+        node,
+        status.program,
+    );
     if (contextDotDef) {
         return [contextDotDef];
     }
@@ -313,29 +299,43 @@ export function findDefinitions(
 }
 
 /**
+ * Resolves a module name or URI to a file system URI.
+ * First tries to resolve as a module URI, then looks up in the file's imports.
+ */
+function resolveModuleUri(
+    context: Context,
+    moduleNameOrUri: string,
+    program: Program | undefined,
+): string | undefined {
+    const moduleUri = context.importResolver.getFileSystemURI(moduleNameOrUri);
+    if (moduleUri) return moduleUri;
+
+    const importMatch = program?.imports.find(
+        (i) => i.name === moduleNameOrUri,
+    );
+    if (importMatch) {
+        return context.importResolver.getFileSystemURI(importMatch.path);
+    }
+    return undefined;
+}
+
+/**
  * Try to resolve a context dot method to its module definition.
  * For `obj.method(...)` calls, this finds the function in the source module.
  */
 function tryContextDotDefinition(
     context: Context,
     node: Node,
+    program: Program | undefined,
 ): Definition | undefined {
-    // Extract receiver and method name from DotE
-    const dotInfo = matchNode(node, 'DotE', (receiver: Node, id: Node) => ({
-        receiver,
-        methodName: getIdName(id),
-    }));
-    if (!dotInfo?.methodName) return undefined;
+    const dotModule = context.motoko.contextualDotModule(node);
+    if (!dotModule) return undefined;
 
-    // Find matching context dot suggestion
-    const suggestions = context.motoko.contextualDotSuggestions(
-        dotInfo.receiver,
+    const moduleUri = resolveModuleUri(
+        context,
+        dotModule.moduleNameOrUri,
+        program,
     );
-    const match = suggestions?.find((s) => s.funcName === dotInfo.methodName);
-    if (!match) return undefined;
-
-    // Resolve module URI and find function definition
-    const moduleUri = context.importResolver.getFileSystemURI(match.moduleUrl);
     if (!moduleUri) return undefined;
 
     const moduleStatus = context.astResolver.request(moduleUri, false);
@@ -344,7 +344,7 @@ function tryContextDotDefinition(
 
     return searchObject(
         { uri: moduleUri, node: exportNode },
-        { type: 'variable', name: match.funcName },
+        { type: 'variable', name: dotModule.funcName },
     );
 }
 
