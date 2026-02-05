@@ -70,7 +70,7 @@ import {
     locationFromDefinition,
     rangeFromNode,
     searchObject,
-    findNodesForPosition,
+    findMostSpecificNodeForPosition,
 } from './navigation';
 import { deployTemporary } from './deployer';
 import {
@@ -1255,24 +1255,20 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             }[] = [];
 
             if (program?.ast) {
-                // Find the most specific node at the cursor position
-                const cursorNodes = findNodesForPosition(
+                const cursorNode = findMostSpecificNodeForPosition(
                     program.ast,
                     position,
-                ).filter((n) => n.name === 'DotE');
-                // TODO: there should be exactly one node.
-                for (const cursorNode of cursorNodes) {
-                    const receiverExp = matchNode(
-                        cursorNode,
-                        'DotE',
-                        (receiver: Node) => receiver,
-                    );
-                    if (receiverExp) {
-                        contextualSuggestions =
-                            context.motoko.contextualDotSuggestions(
-                                receiverExp,
-                            ) ?? [];
-                    }
+                    (n) => n.name === 'DotE',
+                );
+                const receiverExp = matchNode(
+                    cursorNode,
+                    'DotE',
+                    (receiver: Node) => receiver,
+                );
+                if (receiverExp) {
+                    contextualSuggestions =
+                        context.motoko.contextualDotSuggestions(receiverExp) ??
+                        [];
                 }
             }
             const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/ // TODO: only works for identifiers, not `call().method` or `xs[0].m`
