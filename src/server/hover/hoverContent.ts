@@ -214,7 +214,7 @@ export async function getAstHoverContent(
 
             return nodePriorities[candidate.name] || 0;
         },
-        true, // Mouse cursor
+        -1, // Mouse cursor
     );
 
     if (!node) {

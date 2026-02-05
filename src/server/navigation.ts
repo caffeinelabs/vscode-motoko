@@ -94,7 +94,7 @@ export function findMostSpecificNodeForPosition(
     ast: AST,
     position: Position,
     scoreFn: (node: Node) => number | boolean,
-    isMouseCursor = false,
+    cursorOffset = 0, // -1 for a mouse cursor
 ): (Node & { start: Span; end: Span }) | undefined {
     const nodes = findNodes(
         ast,
@@ -107,8 +107,7 @@ export function findMostSpecificNodeForPosition(
             (position.line !== node.start[0] - 1 ||
                 position.character >= node.start[1]) &&
             (position.line !== node.end[0] - 1 ||
-                // TODO: when typing fast it seems sometimes this condition does not catch the expression and we get nothing
-                position.character < node.end[1] + (isMouseCursor ? 0 : 1)),
+                position.character <= node.end[1] + cursorOffset),
     );
 
     // Find the most specific AST node for the cursor position
@@ -253,7 +252,7 @@ export function findDefinitions(
         status.ast,
         position,
         scoreFromNodePriorities,
-        isMouseCursor,
+        isMouseCursor ? -1 : 0,
     );
     if (!node) {
         return [];
@@ -632,7 +631,6 @@ function searchTypeRep(reference: Reference, search: Search): Definition[] {
                 status.ast,
                 location.range.start,
                 scoreFromNodePriorities,
-                false,
             );
             if (!node) {
                 continue;
