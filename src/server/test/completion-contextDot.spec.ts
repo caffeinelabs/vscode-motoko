@@ -1,3 +1,4 @@
+/* eslint jest/expect-expect: ["error", { "assertFunctionNames": ["expect", "expectMapCompletions"] }] */
 import {
     CompletionItemKind,
     CompletionList,
@@ -50,30 +51,7 @@ describe('contextDot completion', () => {
         );
     }
 
-    test.each([
-        [4, 16],
-        [5, 17],
-        [6, 18],
-
-        [8, 26],
-        [9, 27],
-        [10, 28],
-
-        [12, 28],
-        [13, 28],
-        [14, 29],
-        [15, 29],
-        [16, 30],
-        [17, 30],
-
-        [19, 23],
-        [20, 23],
-        [21, 24],
-        [22, 24],
-        [23, 25],
-        [24, 25],
-    ])('map completions at %i:%i', async (line, character) => {
-        const completion = await getCompletion(line, character);
+    function expectMapCompletions(completion: CompletionList) {
         const labels = completion.items.map((item) => item.label);
         expect(labels).not.toContain('empty'); // empty is not a context dot method (no self parameter)
         expect(labels).toContain('add');
@@ -111,5 +89,68 @@ describe('contextDot completion', () => {
                     30,
                 ); // doc comment should be substantial
             });
+    }
+
+    test.each([
+        [4, 16],
+        [5, 17],
+        [6, 18],
+
+        [8, 26],
+        [9, 27],
+        [10, 28],
+
+        [12, 28],
+        [13, 28],
+        [14, 29],
+        [15, 29],
+        [16, 30],
+        [17, 30],
+
+        [19, 23],
+        [20, 23],
+        [21, 24],
+        [22, 24],
+        [23, 25],
+        [24, 25],
+    ])('variable dot completions at %i:%i', async (line, character) => {
+        const completion = await getCompletion(line, character);
+        expectMapCompletions(completion);
     });
+
+    test.each([
+        [26, 40],
+        [27, 41],
+        [28, 42],
+    ])(
+        'static method call result dot completions at %i:%i',
+        async (line, character) => {
+            const completion = await getCompletion(line, character);
+            expectMapCompletions(completion);
+        },
+    );
+
+    test.each([
+        [30, 22],
+        [31, 23],
+        [32, 24],
+    ])(
+        'parenthesized expression dot completions at %i:%i',
+        async (line, character) => {
+            const completion = await getCompletion(line, character);
+            expectMapCompletions(completion);
+        },
+    );
+
+    test.each([
+        [34, 48],
+        [35, 49],
+        [36, 50],
+    ])(
+        'chained method call dot completions at %i:%i',
+        async (line, character) => {
+            const completion = await getCompletion(line, character);
+            expectMapCompletions(completion);
+        },
+    );
 });

@@ -23,3 +23,15 @@ func dotCall20() { obj.a.map };
 func dotCall21() { obj.a.map(func(x) { x }) };
 func dotCall30() { obj.ad.map };
 func dotCall31() { obj.ad.map(func(x) { x }) };
+
+func static1() { Map.empty<Text, Nat>(). };
+func static2() { Map.empty<Text, Nat>().a };
+func static3() { Map.empty<Text, Nat>().ad };
+
+func paren1() { (obj). };
+func paren2() { (obj).a };
+func paren3() { (obj).ad };
+
+func chain1() { obj.filter(func(k, v) { true }). };
+func chain2() { obj.filter(func(k, v) { true }).a };
+func chain3() { obj.filter(func(k, v) { true }).ad };
