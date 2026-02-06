@@ -383,9 +383,19 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         extra.push(...settings.extraFlags);
                     }
                     if (extra.length) {
-                        allContexts().forEach(({ motoko }) =>
-                            (motoko as any).setExtraFlags(extra),
-                        );
+                        allContexts().forEach(({ motoko, mocJsInfo }) => {
+                            const version = mocJsInfo.version;
+                            if (
+                                version &&
+                                semver.valid(version) &&
+                                semver.lte(version, '1.1.0')
+                            ) {
+                                console.warn(
+                                    `Motoko version ${version} may not support all extra flags. Invalid or unsupported flags can cause the extension to crash.`,
+                                );
+                            }
+                            motoko.setExtraFlags(extra);
+                        });
                     }
                 } catch (err) {
                     console.warn('Failed to apply extra flags:', err);
