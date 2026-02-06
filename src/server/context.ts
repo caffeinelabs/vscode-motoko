@@ -1,5 +1,6 @@
 import { existsSync } from 'fs';
 import { type Motoko } from 'motoko/lib';
+import { Scope } from 'motoko/lib/file';
 import * as baseLibrary from 'motoko/packages/latest/base.json';
 import { basename, dirname, isAbsolute, join, resolve } from 'path';
 import AstResolver from './ast';
@@ -25,6 +26,7 @@ export class Context {
     public readonly astResolver: AstResolver;
     public readonly importResolver: ImportResolver;
 
+    public scopeCache = new Map<string, Scope>();
     public packages: [string, string][] | undefined;
     public error: string | undefined;
 
