@@ -153,4 +153,13 @@ describe('contextDot completion', () => {
             expectMapCompletions(completion);
         },
     );
+
+    test.each([
+        [39, 24],
+        [40, 25],
+        [41, 26],
+    ])('index access dot completions at %i:%i', async (line, character) => {
+        const completion = await getCompletion(line, character);
+        expectMapCompletions(completion);
+    });
 });

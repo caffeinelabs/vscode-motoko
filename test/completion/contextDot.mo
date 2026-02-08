@@ -35,3 +35,8 @@ func paren3() { (obj).ad };
 func chain1() { obj.filter(func(k, v) { true }). };
 func chain2() { obj.filter(func(k, v) { true }).a };
 func chain3() { obj.filter(func(k, v) { true }).ad };
+
+let objs = [obj];
+func index1() { objs[0]. };
+func index2() { objs[0].a };
+func index3() { objs[0].ad };
