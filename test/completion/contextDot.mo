@@ -40,3 +40,7 @@ let objs = [obj];
 func index1() { objs[0]. };
 func index2() { objs[0].a };
 func index3() { objs[0].ad };
+
+func complexReceiver0() { Map.filter(obj, func(k, v) { true }). };
+func complexReceiverL() { let _ = Map.filter(obj, func(k, v) { true }) };
+func complexReceiver1() { obj.filter(func(k, v) { true }) };
