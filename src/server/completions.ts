@@ -20,26 +20,17 @@ export function addContextualDotCompletions(
     const cursorNode = findMostSpecificNodeForPosition(
         program.ast,
         position,
-        (n) => {
-            switch (n.name) {
-                case 'DotE':
-                    return 2; // pick DotE when possible
-                // after typing the first dot, the AST still does not have DotE yet, so here we get the receiver directly
-                case 'CallE':
-                    return 1; // prefer CallE over TupE (an argument list)
-                default:
-                    return 0;
-            }
-        },
-        +1, // When typing a field the AST is sometimes missing the last character, compensate for that
+        (n) => n.name === 'DotE',
     );
-    const receiverExp =
-        matchNode(cursorNode, 'DotE', (receiver: Node) => receiver) ??
-        cursorNode;
+    const receiverExp = matchNode(
+        cursorNode,
+        'DotE',
+        (receiver: Node) => receiver,
+    );
     if (!receiverExp) return;
 
     context.motoko
-        .contextualDotSuggestions(receiverExp)
+        .contextualDotSuggestions(receiverExp, program)
         ?.forEach((suggestion) => {
             const additionalTextEdits = hasImportWithPath(
                 program.imports,

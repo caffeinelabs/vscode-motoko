@@ -1229,6 +1229,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         try {
             const doc = documents.get(uri);
             if (!doc) return list;
+            // Flush latest document content to virtual FS before parsing,
+            // since onDidChangeContent debounces notify() by 500ms.
+            // This prevents getting outdated AST from the cache.
+            notify(doc);
             const context = getContext(uri);
             const status = context.astResolver.requestTyped(uri);
             const program = status?.program;
