@@ -40,7 +40,7 @@ export function waitForDiagnostics(
             disposable.dispose();
             reject(new Error(`Timeout waiting for diagnostics for ${uri}`));
         }, timeout);
-
+        // TODO: do we even need this?
         const disposable = client.onNotification(
             'textDocument/publishDiagnostics',
             (params: { uri: string; diagnostics: Diagnostic[] }) => {
@@ -115,6 +115,7 @@ export async function defaultAfterAll(
     server: Connection,
 ): Promise<void> {
     await client.sendRequest('shutdown');
+    // TODO: do we even need this? can we not wait 2s?
     await wait(2);
     client.dispose();
     server.dispose();
