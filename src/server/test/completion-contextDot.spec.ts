@@ -162,4 +162,13 @@ describe('contextDot completion', () => {
         const completion = await getCompletion(line, character);
         expectMapCompletions(completion);
     });
+
+    test.each([
+        [43, 63],
+        [44, 71],
+        [45, 58],
+    ])('complex receiver dot completions at %i:%i', async (line, character) => {
+        const completion = await getCompletion(line, character);
+        expectMapCompletions(completion);
+    });
 });
