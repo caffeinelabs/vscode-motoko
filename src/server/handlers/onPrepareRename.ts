@@ -36,6 +36,7 @@ export function mkOnPrepareRenameHandler(
             status.ast,
             position,
             (node: Node) => node.name === 'ID',
+            false,
         );
         const name = getIdName(node);
         if (!name || keywords.includes(name) || typeKeywords.includes(name)) {
