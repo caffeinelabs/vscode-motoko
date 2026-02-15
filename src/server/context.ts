@@ -16,13 +16,16 @@ type MocJsInfo = {
 
 type Version = string | undefined;
 
+// Hide version-dependent methods from direct access on motoko
+type PublicMotoko = Omit<Motoko, 'checkWithScopeCache'>;
+
 /**
  * A Motoko compiler context.
  */
 export class Context {
     public readonly uri: string;
     public readonly mocJsInfo: MocJsInfo;
-    public readonly motoko: Motoko;
+    public readonly motoko: PublicMotoko;
     public readonly astResolver: AstResolver;
     public readonly importResolver: ImportResolver;
 
@@ -30,21 +33,29 @@ export class Context {
     public packages: [string, string][] | undefined;
     public error: string | undefined;
 
+    // Optional compiler functions for backwards compatibility with older moc.js versions
+    public readonly checkWithScopeCache:
+        | Motoko['checkWithScopeCache']
+        | undefined;
+
     constructor(uri: string, motoko: Motoko, mocJsInfo?: MocJsInfo) {
         this.uri = uri;
         this.mocJsInfo = mocJsInfo || {};
         this.motoko = motoko;
         this.astResolver = new AstResolver(this);
         this.importResolver = new ImportResolver(this);
+
+        // Optional compiler functions for backwards compatibility with older moc.js versions
+        this.checkWithScopeCache = this.motokoHasFunction(
+            motoko,
+            'checkWithScopeCache',
+        )
+            ? motoko.checkWithScopeCache.bind(motoko)
+            : undefined;
     }
 
-    /**
-     * Checks if a compiler function is available in the underlying moc.js.
-     * Useful for backwards compatibility when supporting multiple moc.js versions,
-     * as newer functions may not exist in older versions.
-     */
-    motokoHasFunction(name: string): boolean {
-        return typeof this.motoko.compiler?.[name] === 'function';
+    private motokoHasFunction(motoko: Motoko, name: string): boolean {
+        return typeof motoko.compiler?.[name] === 'function';
     }
 }
 

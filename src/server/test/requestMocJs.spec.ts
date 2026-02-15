@@ -74,11 +74,8 @@ describe('request moc.js', () => {
         test('Old moc.js uses check() fallback', () => {
             const context = getContext(rootUri.toString());
             // Old moc.js doesn't have checkWithScopeCache
-            expect(context.motokoHasFunction('checkWithScopeCache')).toBe(
-                false,
-            );
-            // check() works as fallback
-            expect(context.motokoHasFunction('check')).toBe(true);
+            expect(context.checkWithScopeCache).toBeUndefined();
+            expect(context.motoko.check).toBeDefined();
         });
     });
 

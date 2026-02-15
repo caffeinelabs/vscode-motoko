@@ -997,11 +997,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         context: Context,
         virtualPath: string,
     ): Diagnostic[] {
-        if (context.motokoHasFunction('checkWithScopeCache')) {
-            const checkResult = context.motoko.checkWithScopeCache(
-                virtualPath,
-                context.scopeCache,
-            );
+        const checkResult = context.checkWithScopeCache?.(
+            virtualPath,
+            context.scopeCache,
+        );
+        if (checkResult) {
             if (checkResult.scopeCache) {
                 context.scopeCache = checkResult.scopeCache;
             }
