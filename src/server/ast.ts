@@ -1,5 +1,4 @@
 import { AST } from 'motoko/lib/ast';
-import { Scope } from 'motoko/lib/file';
 import DepGraph from './depgraph';
 import { Context } from './context';
 import { Program, fromAST } from './syntax';
@@ -30,15 +29,13 @@ export default class AstResolver {
     private readonly _typedCache = new Map<string, AstStatus>();
     private readonly _depGraph = new DepGraph();
 
-    private _scopeCache = new Map<string, Scope>();
-
     constructor(private readonly context: Context) {}
 
     clear() {
         this._cache.clear();
         this._typedCache.clear();
         this._depGraph.clear();
-        this._scopeCache.clear();
+        this.context.scopeCache.clear();
     }
 
     listLoadedTypedFiles(): Set<string> {
@@ -80,10 +77,10 @@ export default class AstResolver {
 
         // Invalidate file and its dependents, remove edges to dependencies to
         // relink them later
-        this._scopeCache.delete(virtualPath);
+        this.context.scopeCache.delete(virtualPath);
         this._depGraph.add(virtualPath);
         for (const file of this._depGraph.transitiveDependents(virtualPath)) {
-            this._scopeCache.delete(file);
+            this.context.scopeCache.delete(file);
         }
         this._depGraph.removeImmediateDependencies(virtualPath);
 
@@ -97,12 +94,12 @@ export default class AstResolver {
                     const [prog, scopeCache] =
                         motoko.parseMotokoTypedWithScopeCache(
                             virtualPath,
-                            this._scopeCache,
+                            this.context.scopeCache,
                             enableRecovery /* TODO: not fully supported in the compiler */,
                         );
                     ast = prog.ast;
                     immediateImports = prog.immediateImports;
-                    this._scopeCache = scopeCache;
+                    this.context.scopeCache = scopeCache;
                 } else if (withDeps) {
                     try {
                         const prog = motoko.parseMotokoWithDeps(
@@ -200,7 +197,7 @@ export default class AstResolver {
         const deleted = this._cache.delete(uri);
         const deletedTyped = this._typedCache.delete(uri);
         const deletedGraph = this._depGraph.delete(uri);
-        const deletedCache = this._scopeCache.delete(uri);
+        const deletedCache = this.context.scopeCache.delete(uri);
         return deleted || deletedTyped || deletedGraph || deletedCache;
     }
 
