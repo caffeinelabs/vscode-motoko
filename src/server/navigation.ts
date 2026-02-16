@@ -326,7 +326,7 @@ function tryContextDotDefinition(
     node: Node,
     program: Program | undefined,
 ): Definition | undefined {
-    const dotModule = context.motoko.contextualDotModule(node);
+    const dotModule = context.contextualDotModule?.(node);
     if (!dotModule) return undefined;
 
     const moduleUri = resolveModuleUri(

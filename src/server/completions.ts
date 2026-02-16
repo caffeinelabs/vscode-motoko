@@ -29,8 +29,8 @@ export function addContextualDotCompletions(
     );
     if (!receiverExp) return;
 
-    context.motoko
-        .contextualDotSuggestions(receiverExp, program)
+    context
+        .contextualDotSuggestions?.(receiverExp, program)
         ?.forEach((suggestion) => {
             const additionalTextEdits = hasImportWithPath(
                 program.imports,

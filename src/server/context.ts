@@ -17,7 +17,11 @@ type MocJsInfo = {
 type Version = string | undefined;
 
 // Hide version-dependent methods from direct access on motoko
-type PublicMotoko = Omit<Motoko, 'checkWithScopeCache'>;
+type OptionalCompilerFunctions =
+    | 'contextualDotModule'
+    | 'contextualDotSuggestions'
+    | 'checkWithScopeCache';
+type PublicMotoko = Omit<Motoko, OptionalCompilerFunctions>;
 
 /**
  * A Motoko compiler context.
@@ -37,6 +41,12 @@ export class Context {
     public readonly checkWithScopeCache:
         | Motoko['checkWithScopeCache']
         | undefined;
+    public readonly contextualDotSuggestions:
+        | Motoko['contextualDotSuggestions']
+        | undefined;
+    public readonly contextualDotModule:
+        | Motoko['contextualDotModule']
+        | undefined;
 
     constructor(uri: string, motoko: Motoko, mocJsInfo?: MocJsInfo) {
         this.uri = uri;
@@ -51,6 +61,18 @@ export class Context {
             'checkWithScopeCache',
         )
             ? motoko.checkWithScopeCache.bind(motoko)
+            : undefined;
+        this.contextualDotSuggestions = this.motokoHasFunction(
+            motoko,
+            'contextualDotSuggestions',
+        )
+            ? motoko.contextualDotSuggestions.bind(motoko)
+            : undefined;
+        this.contextualDotModule = this.motokoHasFunction(
+            motoko,
+            'contextualDotModule',
+        )
+            ? motoko.contextualDotModule.bind(motoko)
             : undefined;
     }
 
