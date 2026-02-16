@@ -7,7 +7,12 @@ import {
     defaultAfterAll,
     openTextDocuments,
 } from './helpers';
-import { Connection, Diagnostic } from 'vscode-languageserver';
+import {
+    CompletionList,
+    Connection,
+    Diagnostic,
+    Hover,
+} from 'vscode-languageserver';
 import { getContext } from '../context';
 import * as fs from 'fs';
 import { settings } from '../globals';
@@ -69,6 +74,47 @@ describe('request moc.js', () => {
 
             // Should receive diagnostics with expected type error from Main.mo
             expect(diags.length).toBeGreaterThan(0);
+        });
+
+        test('Simple completion works with downloaded moc.js', async () => {
+            const textDocuments = new Map<string, TextDocument>();
+            const filePath = join(rootPath, 'Main.mo');
+            const fileUri = URI.parse(filePath).toString();
+            await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
+
+            const completion = await client.sendRequest<CompletionList>(
+                'textDocument/completion',
+                {
+                    textDocument: { uri: fileUri },
+                    position: { line: 11, character: 20 },
+                    context: { triggerKind: 1 },
+                },
+            );
+
+            expect(completion.items.some((item) => item.label === 'let')).toBe(
+                true,
+            );
+        });
+
+        test('Simple hover works with downloaded moc.js', async () => {
+            const textDocuments = new Map<string, TextDocument>();
+            const filePath = join(rootPath, 'Main.mo');
+            const fileUri = URI.parse(filePath).toString();
+            await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
+
+            const hover = await client.sendRequest<Hover>(
+                'textDocument/hover',
+                {
+                    textDocument: { uri: fileUri },
+                    position: { line: 0, character: 1 },
+                },
+            );
+
+            expect(hover).toBeDefined();
+            expect(hover).not.toBeNull();
+            const contents = hover!.contents as { kind: string; value: string };
+            expect(contents.kind).toBe('markdown');
+            expect(contents.value).toContain('```motoko\nimport\n```');
         });
 
         test('Old moc.js uses check() fallback', () => {
