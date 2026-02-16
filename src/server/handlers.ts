@@ -962,6 +962,28 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
     }
 
     /**
+     * Checks a file for diagnostics, using scope cache if available.
+     * Falls back to basic check for older moc.js versions.
+     */
+    function checkDiagnostics(
+        context: Context,
+        virtualPath: string,
+    ): Diagnostic[] {
+        const checkResult = context.checkWithScopeCache?.(
+            virtualPath,
+            context.scopeCache,
+        );
+        if (checkResult) {
+            if (checkResult.scopeCache) {
+                context.scopeCache = checkResult.scopeCache;
+            }
+            return checkResult.diagnostics as Diagnostic[];
+        }
+        // Fallback for older moc.js versions without checkWithScopeCache
+        return context.motoko.check(virtualPath) as Diagnostic[];
+    }
+
+    /**
      * Generates errors and warnings for a document.
      */
     function checkImmediate(uri: string | TextDocument): boolean {
@@ -988,14 +1010,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
 
             const context = getContext(resolvedUri);
             console.log('~', virtualPath, `(${context.uri || 'default'})`);
-            const checkResult = context.motoko.checkWithScopeCache(
-                virtualPath,
-                context.scopeCache,
-            );
-            let diagnostics = checkResult.diagnostics as Diagnostic[];
-            if (checkResult.scopeCache) {
-                context.scopeCache = checkResult.scopeCache;
-            }
+            let diagnostics = checkDiagnostics(context, virtualPath);
             if (context.error) {
                 // Context initialization error
                 // diagnostics.length = 0;
