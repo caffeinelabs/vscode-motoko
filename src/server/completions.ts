@@ -32,6 +32,7 @@ export function addContextualDotCompletions(
     context
         .contextualDotSuggestions?.(receiverExp, program)
         ?.forEach((suggestion) => {
+            // Note: suggestion.moduleUri is either an absolute path with .mo extension or `mo:` URI like "mo:core/Array"
             const additionalTextEdits = hasImportWithPath(
                 program.imports,
                 suggestion.moduleUri,

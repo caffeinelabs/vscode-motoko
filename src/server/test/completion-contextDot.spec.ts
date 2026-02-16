@@ -91,6 +91,7 @@ describe('contextDot completion', () => {
         // Test Map function completions
         mapCompletions.forEach((item) => {
             expect(item.detail).toContain('>(self : Map<K, '); // detail should be the type of the Map function
+            expect(item.additionalTextEdits).toBeUndefined(); // Map functions are already imported
         });
 
         // Test other completions
