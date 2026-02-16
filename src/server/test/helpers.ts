@@ -74,18 +74,22 @@ export async function runTest<T>(
     redirectConsole: boolean = true,
     initializationOptions?: Record<string, unknown>,
 ): Promise<T> {
-    const [client, _server] = setupClientServer(redirectConsole);
-    const serverInitialized = waitForNotification('custom/initialized', client);
-    await client.sendRequest<InitializeResult>(
-        'initialize',
-        clientInitParams(rootUri, initializationOptions),
-    );
-    await client.sendNotification('initialized', {});
-    await serverInitialized;
-    const result = await test(client);
-    await client.sendRequest('shutdown');
-    await wait(1); // wait for shutdown
-    return result;
+    const [client, server] = setupClientServer(redirectConsole);
+    try {
+        const serverInitialized = waitForNotification(
+            'custom/initialized',
+            client,
+        );
+        await client.sendRequest<InitializeResult>(
+            'initialize',
+            clientInitParams(rootUri, initializationOptions),
+        );
+        await client.sendNotification('initialized', {});
+        await serverInitialized;
+        return await test(client);
+    } finally {
+        await defaultAfterAll(client, server);
+    }
 }
 
 // Use if you don't care about having server state between tests.
@@ -114,11 +118,12 @@ export async function defaultAfterAll(
     client: Connection,
     server: Connection,
 ): Promise<void> {
-    await client.sendRequest('shutdown');
-    // TODO: do we even need this? can we not wait 2s?
-    await wait(2);
-    client.dispose();
-    server.dispose();
+    try {
+        await client.sendRequest('shutdown');
+    } finally {
+        client.dispose();
+        server.dispose();
+    }
 }
 
 export async function openTextDocuments(
