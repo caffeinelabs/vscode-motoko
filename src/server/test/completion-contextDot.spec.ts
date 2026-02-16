@@ -11,6 +11,7 @@ import {
     defaultBeforeAll,
     openTextDocument,
     TextDocument,
+    waitForNotification,
 } from './helpers';
 import { join } from 'node:path';
 
@@ -30,6 +31,16 @@ describe('contextDot completion', () => {
         [client, server] = await defaultBeforeAll(rootUri, true, {
             useDefaultMocJs: true,
         });
+
+        await client.sendNotification('workspace/didChangeConfiguration', {
+            settings: {
+                motoko: {
+                    extraFlags: ['--ai-errors'],
+                },
+            },
+        });
+        await waitForNotification('custom/initialized', client);
+
         textDocument = await openTextDocument(client, rootUri, fileUri);
     });
     afterAll(async () => await defaultAfterAll(client, server));
@@ -61,34 +72,39 @@ describe('contextDot completion', () => {
             expect(item.kind).toBe(CompletionItemKind.Method);
         });
 
+        const mapCompletions = completion.items.filter(
+            (item) => item.label !== 'some',
+        );
+        expect(mapCompletions.length).toBeGreaterThan(0);
+
+        const otherCompletions = completion.items.filter(
+            (item) => item.label === 'some',
+        );
+        expect(otherCompletions.length).toBeGreaterThan(0);
+
+        const completionsWithDocumentation = completion.items.filter(
+            // exclude functions without documentation
+            (item) => item.label !== 'toArray' && item.label !== 'toVarArray',
+        );
+        expect(completionsWithDocumentation.length).toBeGreaterThan(0);
+
         // Test Map function completions
-        completion.items
-            .filter((item) => item.label !== 'some')
-            .forEach((item) => {
-                expect(item.detail).toContain('>(self : Map<K, '); // detail should be the type of the Map function
-            });
+        mapCompletions.forEach((item) => {
+            expect(item.detail).toContain('>(self : Map<K, '); // detail should be the type of the Map function
+        });
 
         // Test other completions
-        completion.items
-            .filter((item) => item.label === 'some')
-            .forEach((item) => {
-                expect(item.additionalTextEdits?.length).toBe(1);
-                expect(item.additionalTextEdits![0].newText).toBe(
-                    `import Option "mo:core/Option";\n`,
-                ); // auto-import
-            });
+        otherCompletions.forEach((item) => {
+            expect(item.additionalTextEdits?.length).toBe(1);
+            expect(item.additionalTextEdits![0].newText).toBe(
+                `import Option "mo:core/Option";\n`,
+            ); // auto-import
+        });
 
         // Test documentations
-        completion.items
-            .filter(
-                (item) =>
-                    item.label !== 'toArray' && item.label !== 'toVarArray',
-            ) // exclude functions without documentation
-            .forEach((item) => {
-                expect(item.documentation?.toString().length).toBeGreaterThan(
-                    30,
-                ); // doc comment should be substantial
-            });
+        completionsWithDocumentation.forEach((item) => {
+            expect(item.documentation?.toString().length).toBeGreaterThan(30); // doc comment should be substantial
+        });
     }
 
     test.each([
