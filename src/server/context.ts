@@ -44,17 +44,28 @@ export class Context {
         this.astResolver = new AstResolver(this);
         this.importResolver = new ImportResolver(this);
 
+        const unavailable: string[] = [];
+        const has = (name: string) => {
+            const available = typeof motoko.compiler?.[name] === 'function';
+            if (!available) unavailable.push(name);
+            return available;
+        };
+
         // Optional compiler functions for backwards compatibility with older moc.js versions
-        this.checkWithScopeCache = this.motokoHasFunction(
-            motoko,
-            'checkWithScopeCache',
-        )
+        this.checkWithScopeCache = has('checkWithScopeCache')
             ? motoko.checkWithScopeCache.bind(motoko)
             : undefined;
-    }
 
-    private motokoHasFunction(motoko: Motoko, name: string): boolean {
-        return typeof motoko.compiler?.[name] === 'function';
+        if (unavailable.length > 0) {
+            const version = this.mocJsInfo.version
+                ? ` (${this.mocJsInfo.version})`
+                : '';
+            console.info(
+                `moc.js${version} missing optional functions: ${unavailable.join(
+                    ', ',
+                )}`,
+            );
+        }
     }
 }
 
