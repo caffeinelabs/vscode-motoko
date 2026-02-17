@@ -1,8 +1,10 @@
 import { AST } from 'motoko/lib/ast';
+import { Scope } from 'motoko/lib/file';
 import DepGraph from './depgraph';
 import { Context } from './context';
 import { Program, fromAST } from './syntax';
 import { resolveVirtualPath, tryGetFileText } from './utils';
+import { Diagnostic } from 'motoko/lib';
 
 export interface AstStatus {
     uri: string;
@@ -29,13 +31,15 @@ export default class AstResolver {
     private readonly _typedCache = new Map<string, AstStatus>();
     private readonly _depGraph = new DepGraph();
 
+    private _scopeCache = new Map<string, Scope>();
+
     constructor(private readonly context: Context) {}
 
     clear() {
         this._cache.clear();
         this._typedCache.clear();
         this._depGraph.clear();
-        this.context.scopeCache.clear();
+        this._scopeCache.clear();
     }
 
     listLoadedTypedFiles(): Set<string> {
@@ -77,10 +81,10 @@ export default class AstResolver {
 
         // Invalidate file and its dependents, remove edges to dependencies to
         // relink them later
-        this.context.scopeCache.delete(virtualPath);
+        this._scopeCache.delete(virtualPath);
         this._depGraph.add(virtualPath);
         for (const file of this._depGraph.transitiveDependents(virtualPath)) {
-            this.context.scopeCache.delete(file);
+            this._scopeCache.delete(file);
         }
         this._depGraph.removeImmediateDependencies(virtualPath);
 
@@ -94,12 +98,12 @@ export default class AstResolver {
                     const [prog, scopeCache] =
                         motoko.parseMotokoTypedWithScopeCache(
                             virtualPath,
-                            this.context.scopeCache,
+                            this._scopeCache,
                             enableRecovery /* TODO: not fully supported in the compiler */,
                         );
                     ast = prog.ast;
                     immediateImports = prog.immediateImports;
-                    this.context.scopeCache = scopeCache;
+                    this._scopeCache = scopeCache;
                 } else if (withDeps) {
                     try {
                         const prog = motoko.parseMotokoWithDeps(
@@ -197,8 +201,26 @@ export default class AstResolver {
         const deleted = this._cache.delete(uri);
         const deletedTyped = this._typedCache.delete(uri);
         const deletedGraph = this._depGraph.delete(uri);
-        const deletedCache = this.context.scopeCache.delete(uri);
+        const deletedCache = this._scopeCache.delete(uri);
         return deleted || deletedTyped || deletedGraph || deletedCache;
+    }
+
+    /**
+     * Checks a file for diagnostics, using scope cache if available.
+     * Falls back to basic check for older moc.js versions.
+     */
+    checkDiagnostics(virtualPath: string): Diagnostic[] {
+        const checkResult = this.context.checkWithScopeCache?.(
+            virtualPath,
+            this._scopeCache,
+        );
+        if (checkResult) {
+            if (checkResult.scopeCache) {
+                this._scopeCache = checkResult.scopeCache;
+            }
+            return checkResult.diagnostics;
+        }
+        return this.context.motoko.check(virtualPath);
     }
 
     getDependencyGraph(): DepGraph {
