@@ -16,7 +16,8 @@ type MocJsInfo = {
 type Version = string | undefined;
 
 // Hide version-dependent methods from direct access on motoko
-type PublicMotoko = Omit<Motoko, 'checkWithScopeCache'>;
+type OptionalCompilerFunctions = 'checkWithScopeCache';
+type PublicMotoko = Omit<Motoko, OptionalCompilerFunctions>;
 
 /**
  * A Motoko compiler context.
