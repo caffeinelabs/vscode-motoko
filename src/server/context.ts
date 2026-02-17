@@ -1,6 +1,5 @@
 import { existsSync } from 'fs';
 import { type Motoko } from 'motoko/lib';
-import { Scope } from 'motoko/lib/file';
 import * as baseLibrary from 'motoko/packages/latest/base.json';
 import { basename, dirname, isAbsolute, join, resolve } from 'path';
 import AstResolver from './ast';
@@ -33,7 +32,6 @@ export class Context {
     public readonly astResolver: AstResolver;
     public readonly importResolver: ImportResolver;
 
-    public scopeCache = new Map<string, Scope>();
     public packages: [string, string][] | undefined;
     public error: string | undefined;
 
@@ -55,29 +53,31 @@ export class Context {
         this.astResolver = new AstResolver(this);
         this.importResolver = new ImportResolver(this);
 
+        const unavailable: OptionalCompilerFunctions[] = [];
+        const has = (name: OptionalCompilerFunctions) => {
+            const available = typeof motoko.compiler?.[name] === 'function';
+            if (!available) unavailable.push(name);
+            return available;
+        };
+
         // Optional compiler functions for backwards compatibility with older moc.js versions
-        this.checkWithScopeCache = this.motokoHasFunction(
-            motoko,
-            'checkWithScopeCache',
-        )
+        this.checkWithScopeCache = has('checkWithScopeCache')
             ? motoko.checkWithScopeCache.bind(motoko)
             : undefined;
-        this.contextualDotSuggestions = this.motokoHasFunction(
-            motoko,
-            'contextualDotSuggestions',
-        )
+        this.contextualDotSuggestions = has('contextualDotSuggestions')
             ? motoko.contextualDotSuggestions.bind(motoko)
             : undefined;
-        this.contextualDotModule = this.motokoHasFunction(
-            motoko,
-            'contextualDotModule',
-        )
+        this.contextualDotModule = has('contextualDotModule')
             ? motoko.contextualDotModule.bind(motoko)
             : undefined;
-    }
 
-    private motokoHasFunction(motoko: Motoko, name: string): boolean {
-        return typeof motoko.compiler?.[name] === 'function';
+        if (unavailable.length > 0) {
+            console.info(
+                `moc.js${
+                    this.mocJsInfo.version ? ` (${this.mocJsInfo.version})` : ''
+                } missing optional functions: ${unavailable.join(', ')}`,
+            );
+        }
     }
 }
 
