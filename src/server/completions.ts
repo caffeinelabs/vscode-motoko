@@ -10,7 +10,7 @@ import {
     getImportName,
     hasImportForModule as hasImportUri,
     importTextEdit,
-    uriFromCompilerPathOrUri,
+    importUriFromCompilerUri,
 } from './imports';
 import { getRelativeUri } from './utils';
 import { findMostSpecificNodeForPosition } from './navigation';
@@ -40,7 +40,7 @@ export function addContextualDotCompletions(
         .contextualDotSuggestions?.(receiverExp, program)
         ?.forEach((suggestion) => {
             // Note: suggestion.moduleUri is either an absolute path with .mo extension or `mo:` URI like "mo:core/Array"
-            const importUri = uriFromCompilerPathOrUri(suggestion.moduleUri);
+            const importUri = importUriFromCompilerUri(suggestion.moduleUri);
             const importPath = getRelativeUri(documentUri, importUri);
             const additionalTextEdits = hasImportUri(
                 program.imports,

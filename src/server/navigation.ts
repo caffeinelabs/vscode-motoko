@@ -10,7 +10,7 @@ import {
     findInPattern,
     Program,
 } from './syntax';
-import { resolveImportUri } from './imports';
+import { resolveImportUri, importUriFromCompilerUri } from './imports';
 import { LocationSet } from './utils';
 
 export interface Reference {
@@ -264,6 +264,7 @@ export function findDefinitions(
         context,
         node,
         status.program,
+        uri,
     );
     if (contextDotDef) {
         return [contextDotDef];
@@ -297,25 +298,20 @@ export function findDefinitions(
     return definitions;
 }
 
-/**
- * Resolves a module name or URI to a file system URI.
- * First tries to resolve as a module URI, then looks up in the file's imports.
- */
-function resolveModuleUri(
-    context: Context,
+function resolveModuleImportUri(
     moduleNameOrUri: string,
     program: Program | undefined,
-): string | undefined {
-    const moduleUri = context.importResolver.getFileSystemURI(moduleNameOrUri);
-    if (moduleUri) return moduleUri;
-
-    const importMatch = program?.imports.find(
-        (i) => i.name === moduleNameOrUri,
-    );
-    if (importMatch) {
-        return context.importResolver.getFileSystemURI(importMatch.path);
+    documentUri: string,
+): string {
+    // Most common case: try to resolve as import name
+    for (const imp of program?.imports ?? []) {
+        if (imp.name === moduleNameOrUri) {
+            return resolveImportUri(documentUri, imp.path);
+        }
     }
-    return undefined;
+
+    // Fallback: treat it as an compiler URI / absolute path
+    return importUriFromCompilerUri(moduleNameOrUri);
 }
 
 /**
@@ -326,15 +322,17 @@ function tryContextDotDefinition(
     context: Context,
     node: Node,
     program: Program | undefined,
+    documentUri: string,
 ): Definition | undefined {
     const dotModule = context.contextualDotModule?.(node);
     if (!dotModule) return undefined;
 
-    const moduleUri = resolveModuleUri(
-        context,
+    const moduleImportUri = resolveModuleImportUri(
         dotModule.moduleNameOrUri,
         program,
+        documentUri,
     );
+    const moduleUri = context.importResolver.getFileSystemURI(moduleImportUri);
     if (!moduleUri) return undefined;
 
     const moduleStatus = context.astResolver.request(moduleUri, false);

@@ -383,7 +383,7 @@ function stripMoExtension(path: string): string {
  * to a module URI (e.g. `file:///Users/.../libA`).
  * Scheme-based URIs (e.g. `mo:core/Array`) are returned as-is.
  */
-export function uriFromCompilerPathOrUri(moduleUri: string): string {
+export function importUriFromCompilerUri(moduleUri: string): string {
     if (moduleUri.includes(':')) {
         return moduleUri;
     }
