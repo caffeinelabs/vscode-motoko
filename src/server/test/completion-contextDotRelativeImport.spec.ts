@@ -56,7 +56,9 @@ describe('contextDot completion with relative import', () => {
         );
         expect(fromLibAItem).toBeDefined();
         expect(fromLibAItem?.additionalTextEdits).toBeUndefined();
+        expect(fromLibAItem?.documentation).toBe('Documentation for fromLibA');
         expect(fromLibBItem).toBeDefined();
         expect(fromLibBItem?.additionalTextEdits).toBeUndefined();
+        expect(fromLibBItem?.documentation).toBe('Documentation for fromLibB');
     });
 });

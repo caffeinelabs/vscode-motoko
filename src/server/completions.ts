@@ -56,7 +56,7 @@ export function addContextualDotCompletions(
                       ),
                   ];
             const field = context.importResolver.getField(
-                suggestion.moduleUri,
+                importUri,
                 suggestion.funcName,
             );
             items.push({
