@@ -57,13 +57,10 @@ export class Context {
             : undefined;
 
         if (unavailable.length > 0) {
-            const version = this.mocJsInfo.version
-                ? ` (${this.mocJsInfo.version})`
-                : '';
             console.info(
-                `moc.js${version} missing optional functions: ${unavailable.join(
-                    ', ',
-                )}`,
+                `moc.js${
+                    this.mocJsInfo.version ? ` (${this.mocJsInfo.version})` : ''
+                } missing optional functions: ${unavailable.join(', ')}`,
             );
         }
     }
