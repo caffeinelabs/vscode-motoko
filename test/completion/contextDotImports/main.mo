@@ -1,5 +1,5 @@
-import LibA "./libA";
-import LibB "../contextDotImports/libB"; // tricky relative import
+import MyLibA "libA";
+import MyLibB "../contextDotImports/libB";
 
-let value = LibA.empty();
-value.
+let value = MyLibA.empty();
+value.;

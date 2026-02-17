@@ -1258,6 +1258,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     program,
                     context,
                     position,
+                    uri,
                 );
             }
 

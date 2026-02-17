@@ -9,7 +9,8 @@ import {
 } from 'vscode-languageserver/node';
 import { Context, getContext } from './context';
 import { Import, Program, getIdName, matchNode } from './syntax';
-import { formatMotoko, getRelativeUri } from './utils';
+import { URI } from 'vscode-uri';
+import { formatMotoko, getAbsoluteUri, getRelativeUri } from './utils';
 
 export function extractFields(
     ast: AST,
@@ -373,15 +374,49 @@ export function hasImportWithName(
     );
 }
 
+function stripMoExtension(path: string): string {
+    return path.endsWith('.mo') ? path.slice(0, -3) : path;
+}
+
 /**
- * Checks if an import with the given path already exists.
+ * Converts a compiler virtual path (e.g. `/Users/.../libA.mo`)
+ * to a module URI (e.g. `file:///Users/.../libA`).
+ * Scheme-based URIs (e.g. `mo:core/Array`) are returned as-is.
  */
-export function hasImportWithPath(
+export function uriFromCompilerPathOrUri(moduleUri: string): string {
+    if (moduleUri.includes(':')) {
+        return moduleUri;
+    }
+    return URI.file(stripMoExtension(moduleUri)).toString();
+}
+
+/**
+ * Resolves a Motoko import path to a full module URI.
+ * Scheme-based paths (e.g. `mo:core/Array`) are returned as-is.
+ * Relative paths are resolved against the document URI.
+ */
+export function resolveImportUri(
+    documentUri: string,
+    importPath: string,
+): string {
+    if (importPath.includes(':')) {
+        return importPath;
+    }
+    return getAbsoluteUri(documentUri, '..', importPath);
+}
+
+/**
+ * Checks if any existing import references the same module as the given module URI.
+ */
+export function hasImportForModule(
     imports: Import[] | undefined,
-    path: string,
+    documentUri: string,
+    moduleUri: string,
 ): boolean {
     if (!imports) return false;
-    return imports.some((i) => i.path === path);
+    return imports.some(
+        (i) => resolveImportUri(documentUri, i.path) === moduleUri,
+    );
 }
 
 /**

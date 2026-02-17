@@ -10,7 +10,8 @@ import {
     findInPattern,
     Program,
 } from './syntax';
-import { getAbsoluteUri, LocationSet } from './utils';
+import { resolveImportUri } from './imports';
+import { LocationSet } from './utils';
 
 export interface Reference {
     uri: string;
@@ -516,9 +517,7 @@ export function followImport(
     // Follow the module import
     return matchNode(importNode, 'ImportE', (path: string) => {
         const uri = context.importResolver.getFileSystemURI(
-            path.includes(':')
-                ? path
-                : getAbsoluteUri(reference.uri, '..', path),
+            resolveImportUri(reference.uri, path),
         );
         if (!uri) {
             console.log('Unknown file system URI for path:', path);

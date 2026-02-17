@@ -6,7 +6,13 @@ import {
 } from 'vscode-languageserver/node';
 
 import { Context } from './context';
-import { getImportName, hasImportWithPath, importTextEdit } from './imports';
+import {
+    getImportName,
+    hasImportForModule as hasImportUri,
+    importTextEdit,
+    uriFromCompilerPathOrUri,
+} from './imports';
+import { getRelativeUri } from './utils';
 import { findMostSpecificNodeForPosition } from './navigation';
 import { matchNode, Program } from './syntax';
 
@@ -15,6 +21,7 @@ export function addContextualDotCompletions(
     program: Program,
     context: Context,
     position: Position,
+    documentUri: string,
 ): void {
     if (!program.ast) return;
     const cursorNode = findMostSpecificNodeForPosition(
@@ -33,16 +40,19 @@ export function addContextualDotCompletions(
         .contextualDotSuggestions?.(receiverExp, program)
         ?.forEach((suggestion) => {
             // Note: suggestion.moduleUri is either an absolute path with .mo extension or `mo:` URI like "mo:core/Array"
-            const additionalTextEdits = hasImportWithPath(
+            const importUri = uriFromCompilerPathOrUri(suggestion.moduleUri);
+            const importPath = getRelativeUri(documentUri, importUri);
+            const additionalTextEdits = hasImportUri(
                 program.imports,
-                suggestion.moduleUri,
+                documentUri,
+                importUri,
             )
                 ? undefined
                 : [
                       importTextEdit(
                           program.imports,
-                          getImportName(suggestion.moduleUri),
-                          suggestion.moduleUri,
+                          getImportName(importPath),
+                          importPath,
                       ),
                   ];
             const field = context.importResolver.getField(
