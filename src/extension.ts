@@ -248,7 +248,7 @@ export function startServer(context: ExtensionContext) {
         run: { module, transport: TransportKind.ipc, options: { execArgv } },
         debug: {
             module,
-            options: { execArgv: ['--nolazy', '--inspect=6004', ...execArgv] },
+            options: { execArgv: ['--nolazy', '--inspect=6005', ...execArgv] },
             transport: TransportKind.ipc,
         },
     });
