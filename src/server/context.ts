@@ -15,18 +15,27 @@ type MocJsInfo = {
 
 type Version = string | undefined;
 
+// Hide version-dependent methods from direct access on motoko
+type OptionalCompilerFunctions = 'checkWithScopeCache';
+type PublicMotoko = Omit<Motoko, OptionalCompilerFunctions>;
+
 /**
  * A Motoko compiler context.
  */
 export class Context {
     public readonly uri: string;
     public readonly mocJsInfo: MocJsInfo;
-    public readonly motoko: Motoko;
+    public readonly motoko: PublicMotoko;
     public readonly astResolver: AstResolver;
     public readonly importResolver: ImportResolver;
 
     public packages: [string, string][] | undefined;
     public error: string | undefined;
+
+    // Optional compiler functions for backwards compatibility with older moc.js versions
+    public readonly checkWithScopeCache:
+        | Motoko['checkWithScopeCache']
+        | undefined;
 
     constructor(uri: string, motoko: Motoko, mocJsInfo?: MocJsInfo) {
         this.uri = uri;
@@ -34,6 +43,26 @@ export class Context {
         this.motoko = motoko;
         this.astResolver = new AstResolver(this);
         this.importResolver = new ImportResolver(this);
+
+        const unavailable: string[] = [];
+        const has = (name: string) => {
+            const available = typeof motoko.compiler?.[name] === 'function';
+            if (!available) unavailable.push(name);
+            return available;
+        };
+
+        // Optional compiler functions for backwards compatibility with older moc.js versions
+        this.checkWithScopeCache = has('checkWithScopeCache')
+            ? motoko.checkWithScopeCache.bind(motoko)
+            : undefined;
+
+        if (unavailable.length > 0) {
+            console.info(
+                `moc.js${
+                    this.mocJsInfo.version ? ` (${this.mocJsInfo.version})` : ''
+                } missing optional functions: ${unavailable.join(', ')}`,
+            );
+        }
     }
 }
 

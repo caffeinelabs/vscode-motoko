@@ -4,6 +4,7 @@ import DepGraph from './depgraph';
 import { Context } from './context';
 import { Program, fromAST } from './syntax';
 import { resolveVirtualPath, tryGetFileText } from './utils';
+import { Diagnostic } from 'motoko/lib';
 
 export interface AstStatus {
     uri: string;
@@ -202,6 +203,24 @@ export default class AstResolver {
         const deletedGraph = this._depGraph.delete(uri);
         const deletedCache = this._scopeCache.delete(uri);
         return deleted || deletedTyped || deletedGraph || deletedCache;
+    }
+
+    /**
+     * Checks a file for diagnostics, using scope cache if available.
+     * Falls back to basic check for older moc.js versions.
+     */
+    checkDiagnostics(virtualPath: string): Diagnostic[] {
+        const checkResult = this.context.checkWithScopeCache?.(
+            virtualPath,
+            this._scopeCache,
+        );
+        if (checkResult) {
+            if (checkResult.scopeCache) {
+                this._scopeCache = checkResult.scopeCache;
+            }
+            return checkResult.diagnostics;
+        }
+        return this.context.motoko.check(virtualPath);
     }
 
     getDependencyGraph(): DepGraph {

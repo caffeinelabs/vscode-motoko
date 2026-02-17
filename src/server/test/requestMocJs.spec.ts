@@ -1,8 +1,13 @@
 import { URI } from 'vscode-uri';
 import { join } from 'node:path';
 import { cwd } from 'node:process';
-import { defaultBeforeAll, defaultAfterAll } from './helpers';
-import { Connection } from 'vscode-languageserver';
+import {
+    TextDocument,
+    defaultBeforeAll,
+    defaultAfterAll,
+    openTextDocuments,
+} from './helpers';
+import { Connection, Diagnostic } from 'vscode-languageserver';
 import { getContext } from '../context';
 import * as fs from 'fs';
 import { settings } from '../globals';
@@ -41,6 +46,36 @@ describe('request moc.js', () => {
 
         test('Moc.js has been downloaded', () => {
             expect(fs.existsSync(mocPath)).toBe(true);
+        });
+
+        test('Diagnostics work with downloaded moc.js', async () => {
+            const textDocuments = new Map<string, TextDocument>();
+            const filePath = join(rootPath, 'Main.mo');
+            const fileUri = URI.parse(filePath).toString();
+            await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
+
+            // Wait for diagnostics
+            const diags = await new Promise<Diagnostic[]>((resolve) => {
+                const disposable = client.onNotification(
+                    'textDocument/publishDiagnostics',
+                    (params: { uri: string; diagnostics: Diagnostic[] }) => {
+                        if (params.uri === fileUri) {
+                            disposable.dispose();
+                            resolve(params.diagnostics);
+                        }
+                    },
+                );
+            });
+
+            // Should receive diagnostics with expected type error from Main.mo
+            expect(diags.length).toBeGreaterThan(0);
+        });
+
+        test('Old moc.js uses check() fallback', () => {
+            const context = getContext(rootUri.toString());
+            // Old moc.js doesn't have checkWithScopeCache
+            expect(context.checkWithScopeCache).toBeUndefined();
+            expect(context.motoko.check).toBeDefined();
         });
     });
 

@@ -1014,15 +1014,17 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 return false;
             }
 
-            const { uri: contextUri, motoko, error } = getContext(resolvedUri);
-            console.log('~', virtualPath, `(${contextUri || 'default'})`);
-            let diagnostics = motoko.check(virtualPath) as Diagnostic[];
-            if (error) {
+            const context = getContext(resolvedUri);
+            console.log('~', virtualPath, `(${context.uri || 'default'})`);
+            let diagnostics = context.astResolver.checkDiagnostics(
+                virtualPath,
+            ) as Diagnostic[];
+            if (context.error) {
                 // Context initialization error
                 // diagnostics.length = 0;
                 diagnostics.push({
                     source: virtualPath,
-                    message: error,
+                    message: context.error,
                     severity: DiagnosticSeverity.Information,
                     range: {
                         start: { line: 0, character: 0 },
