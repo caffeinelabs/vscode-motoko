@@ -1,10 +1,15 @@
 import { pascalCase } from 'change-case';
 import { MultiMap } from 'mnemonist';
 import { AST, Node } from 'motoko/lib/ast';
-import { CompletionItemKind, CompletionItem } from 'vscode-languageserver/node';
+import {
+    CompletionItemKind,
+    CompletionItem,
+    Position,
+    TextEdit,
+} from 'vscode-languageserver/node';
 import { Context, getContext } from './context';
-import { Import, Program, getIdName, matchNode } from './syntax';
-import { formatMotoko, getRelativeUri } from './utils';
+import { Import, Program, getIdName, asDecField, matchNode } from './syntax';
+import { formatMotoko, getAbsoluteUri, getRelativeUri } from './utils';
 
 export function extractFields(
     ast: AST,
@@ -13,18 +18,12 @@ export function extractFields(
     const fieldMap = new MultiMap<string, CompletionItem>(Set);
     matchNode(ast, 'ObjBlockE', (_s: string, _t: string, ...fields: Node[]) =>
         fields.forEach((field) => {
-            if (field.name !== 'DecField') {
-                console.error(
-                    'Error: expected `DecField`, received',
-                    field.name,
-                );
+            const df = asDecField(field);
+            if (!df || df.visibility !== 'Public') {
                 return;
             }
-            const [dec, visibility] = field.args!;
-            const doc = field.doc;
-            if (visibility !== 'Public') {
-                return;
-            }
+            const { node, dec } = df;
+            const doc = node.doc;
             matchNode(dec, 'LetD', (pat: Node, exp: Node) => {
                 const name = matchNode(pat, 'VarP', (field: Node) => field);
                 if (name) {
@@ -176,10 +175,10 @@ export default class ImportResolver {
      * Converts a resolved import path into the corresponding file system URI.
      * @param uri Absolute file import URI (e.g. `mo:package/File`, `canister:alias`, `file:///Lib`)
      */
-    getFileSystemURI(path: string): string | undefined {
+    getFileSystemURI(uri: string): string | undefined {
         return (
-            this._fileSystemMap.get(path) ||
-            this._fileSystemMap.get(`${path}/lib`)
+            this._fileSystemMap.get(uri) ||
+            this._fileSystemMap.get(`${uri}/lib`)
         );
     }
 }
@@ -290,4 +289,94 @@ export function organizeImports(imports: Import[]): string {
         });
 
     return formatMotoko(groupParts.map((p) => p.join('\n')).join('\n\n'));
+}
+
+/**
+ * Finds the position where a new import should be inserted.
+ * @param imports The existing imports in the program
+ * @param importPath The path of the import to add
+ * @returns The position where the new import should be inserted
+ */
+export function findImportInsertPosition(
+    imports: Import[] | undefined,
+    importPath: string,
+): Position {
+    if (!imports?.length) {
+        return Position.create(0, 0);
+    }
+
+    let lastImport = imports[imports.length - 1];
+
+    // add after last import from the same package
+    if (importPath.startsWith('mo:')) {
+        const importsReversed = imports.slice().reverse();
+        const packagePrefix = importPath.split('/')[0];
+
+        const lastSamePackageImport = importsReversed.find((imprt) => {
+            return (
+                imprt.path === packagePrefix ||
+                imprt.path.startsWith(`${packagePrefix}/`)
+            );
+        });
+        if (lastSamePackageImport) {
+            lastImport = lastSamePackageImport;
+        } else {
+            // add after last package import
+            const lastPackageImport = importsReversed.find((imprt) => {
+                return imprt.path.startsWith('mo:');
+            });
+            if (lastPackageImport) {
+                lastImport = lastPackageImport;
+            }
+        }
+    }
+
+    const end = (lastImport.ast as Node)?.end;
+    if (end) {
+        return Position.create(end[0], 0);
+    }
+    return Position.create(0, 0);
+}
+
+/**
+ * Checks if an import with the given name already exists.
+ * Matches against module name or field alias.
+ */
+export function hasImportWithName(
+    imports: Import[] | undefined,
+    name: string,
+): boolean {
+    if (!imports) return false;
+    return imports.some(
+        (i) => i.name === name || i.fields.some(([, alias]) => alias === name),
+    );
+}
+
+/**
+ * Resolves a Motoko import path to a full module URI.
+ * Scheme-based paths (e.g. `mo:core/Array`) are returned as-is.
+ * Relative paths are resolved against the document URI.
+ */
+export function resolveImportUri(
+    documentUri: string,
+    importPath: string,
+): string {
+    if (importPath.includes(':')) {
+        return importPath;
+    }
+    return getAbsoluteUri(documentUri, '..', importPath);
+}
+
+/**
+ * Creates a TextEdit for adding a new import.
+ */
+export function importTextEdit(
+    imports: Import[] | undefined,
+    name: string,
+    path: string,
+): TextEdit {
+    return TextEdit.insert(
+        findImportInsertPosition(imports, path),
+        `import ${name} "${path}";\n`,
+    );
 }
