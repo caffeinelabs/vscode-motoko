@@ -60,7 +60,13 @@ import {
     resetContexts,
 } from './context';
 import DfxResolver from './dfx';
-import { extractFields, organizeImports } from './imports';
+import {
+    importTextEdit,
+    extractFields,
+    findImportInsertPosition,
+    hasImportWithName,
+    organizeImports,
+} from './imports';
 import {
     startPosDesc,
     Definition,
@@ -75,7 +81,6 @@ import { deployTemporary } from './deployer';
 import {
     Class,
     Field,
-    Import,
     ObjBlock,
     Program,
     SyntaxWithFields,
@@ -581,7 +586,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         }, 1000);
     }
 
-    // TODO: refactor
     function findNewImportPosition(
         uri: string,
         context: Context,
@@ -591,40 +595,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             uri,
             isVirtualFileSystemReady,
         )?.program?.imports;
-        if (imports?.length) {
-            let lastImport = imports[imports.length - 1];
-
-            // add after last import from the same package
-            if (importPath.startsWith('mo:')) {
-                const importsReversed = imports.slice().reverse();
-                importPath = importPath.split('/')[0];
-
-                const lastSamePackageImport: Import | undefined =
-                    importsReversed.find((imprt) => {
-                        return (
-                            imprt.path === importPath ||
-                            imprt.path.startsWith(`${importPath}/`)
-                        );
-                    });
-                if (lastSamePackageImport) {
-                    lastImport = lastSamePackageImport;
-                } else {
-                    // add after last package import
-                    const lastPackageImport = importsReversed.find((imprt) => {
-                        return imprt.path.startsWith('mo:');
-                    });
-                    if (lastPackageImport) {
-                        lastImport = lastPackageImport;
-                    }
-                }
-            }
-
-            const end = (lastImport.ast as Node)?.end;
-            if (end) {
-                return Position.create(end[0], 0);
-            }
-        }
-        return Position.create(0, 0);
+        return findImportInsertPosition(imports, importPath);
     }
 
     if (redirectConsole) {
@@ -1240,61 +1211,31 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return;
     }
 
-    function getOffset(text: string, { line, character }: Position): number {
-        const lines = text.split('\n');
-
-        if (line >= lines.length) {
-            throw new Error('Line number out of range');
-        }
-        if (character > lines[line].length) {
-            throw new Error('Character position out of range');
-        }
-
-        // +character for offset into a line, +line for each newline character
-        let offset = character + line;
-        for (let i = 0; i < line; i++) {
-            offset += lines[i].length;
-        }
-
-        return offset;
-    }
-
-    function getLineAndCharacter(text: string, offset: number): Position {
-        if (offset < 0 || offset > text.length) {
-            throw new Error('Offset out of range');
-        }
-
-        let currentOffset = 0;
-        const lines = text.split('\n');
-        for (let line = 0; line < lines.length; line++) {
-            const lineLength = lines[line].length + 1; // +1 for the newline
-
-            if (currentOffset + lineLength > offset) {
-                const character = offset - currentOffset;
-                return { line, character };
-            }
-
-            currentOffset += lineLength;
-        }
-
-        throw new Error('Offset calculation failed');
-    }
-
     connection.onCompletion((event) => {
         const { position } = event;
         const { uri } = event.textDocument;
 
+        // NOTE: isIncomplete=false means the client will filter the completion list
+        // client-side based on the typed prefix. This avoids recomputing the list
+        // on each keystroke, improving performance. The server returns all possible
+        // completions and lets the client handle prefix filtering.
         const list = CompletionList.create([], false);
         try {
-            const text = getFileText(uri);
             const doc = documents.get(uri);
             if (!doc) return list;
+            // Flush latest document content to virtual FS before parsing,
+            // since onDidChangeContent debounces notify() by 500ms.
+            // This prevents getting outdated AST from the cache.
+            notify(doc);
             const context = getContext(uri);
             const status = context.astResolver.requestTyped(uri);
             const program = status?.program;
-            const offset = getOffset(text, position);
-            const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/
-                .exec(text.substring(0, offset))
+            const offset = doc.offsetAt(position);
+            const prefix = doc.getText(
+                Range.create(Position.create(0, 0), position),
+            );
+            const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/ // TODO: only works for identifiers, not `call().method` or `xs[0].m`
+                .exec(prefix)
                 ?.slice(1) ?? ['', ''];
             if (!dot) {
                 let hadError = false;
@@ -1302,26 +1243,19 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     .getNameEntries()
                     .forEach(([name, importPath]) => {
                         try {
-                            const path = importPath.startsWith('mo:')
-                                ? importPath
-                                : getRelativeUri(uri, importPath);
-                            const existingImport =
-                                status?.program?.imports.find(
-                                    (i) =>
-                                        i.name === name ||
-                                        i.fields.some(
-                                            ([, alias]) => alias === name,
-                                        ),
-                                );
-                            if (existingImport || !status?.program) {
+                            const program = status?.program;
+                            if (
+                                !program ||
+                                hasImportWithName(program.imports, name)
+                            ) {
                                 // Skip alternatives with already imported name
                                 return;
                             }
+                            const path = importPath.startsWith('mo:')
+                                ? importPath
+                                : getRelativeUri(uri, importPath);
                             const edits: TextEdit[] = [
-                                TextEdit.insert(
-                                    findNewImportPosition(uri, context, path),
-                                    `import ${name} "${path}";\n`,
-                                ),
+                                importTextEdit(program.imports, name, path),
                             ];
                             list.items.push({
                                 label: name,
@@ -1552,14 +1486,14 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 // Check for an identifier before the dot (e.g. `Module.abc`)
                 const end = offset - dot.length - identStart.length;
                 const preMatch = /(\s*\.\s*)?([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(
-                    text.substring(0, end),
+                    prefix.substring(0, end),
                 );
                 if (!preMatch) {
                     return list;
                 }
                 const [_preMatch, _preDot, preIdent] = preMatch;
                 const start = end - preIdent.length;
-                const indentPosition = getLineAndCharacter(text, start);
+                const indentPosition = doc.positionAt(start);
                 const definitions = findDefinitions(uri, indentPosition);
                 function completionsFromDefinition(definition: Definition) {
                     // HACK: Base modules seem to be contained inside an ExpD, so we
@@ -1971,6 +1905,21 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             diagnostics: [],
         });
         checkWorkspace();
+    });
+
+    connection.onShutdown(() => {
+        // Prevent new checks from being scheduled
+        disableChecks = true;
+
+        // Clear all pending timeouts to prevent operations on disposed connection
+        clearTimeout(checkTimeout);
+        clearTimeout(checkWorkspaceTimeout);
+        clearTimeout(packageConfigChangeTimeout);
+        clearTimeout(dfxChangeTimeout);
+        clearTimeout(validatingTimeout);
+
+        // Clear the check queue
+        checkQueue.length = 0;
     });
 
     documents.listen(connection);
