@@ -6,7 +6,7 @@ import {
 import { URI } from 'vscode-uri';
 import { clientInitParams, setupClientServer } from './mock';
 import { cwd } from 'node:process';
-import { wait, waitForNotification } from './helpers';
+import { waitForNotification } from './helpers';
 import { readFileSync } from 'node:fs';
 
 jest.setTimeout(60000);
@@ -33,12 +33,9 @@ describe('code actions', () => {
         await client.sendNotification('initialized', {});
 
         await serverInitialized;
-
-        await wait(0.5);
     });
     afterAll(async () => {
         await client.sendRequest('shutdown');
-        await wait(2);
         client.dispose();
         server.dispose();
     });

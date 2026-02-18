@@ -8,7 +8,7 @@ import {
 import { URI } from 'vscode-uri';
 import { clientInitParams, setupClientServer } from '../test/mock';
 import { cwd } from 'node:process';
-import { wait, waitForNotification } from './helpers';
+import { waitForDiagnostics, waitForNotification } from './helpers';
 
 jest.setTimeout(60000);
 
@@ -89,6 +89,7 @@ describe('completion', () => {
             textDocument: file.textDocument,
         });
 
+        const diagnosticsPromise = waitForDiagnostics(client, file.uri);
         await client.sendNotification('textDocument/didChange', {
             textDocument: {
                 uri: file.uri,
@@ -100,12 +101,10 @@ describe('completion', () => {
                 },
             ],
         });
-
-        await wait(0.5);
+        await diagnosticsPromise;
     });
     afterAll(async () => {
         await client.sendRequest('shutdown');
-        await wait(2);
         client.dispose();
         server.dispose();
     });
