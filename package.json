@@ -183,6 +183,7 @@
     "main": "./out/extension",
     "browser": "./out/browser",
     "dependencies": {
+        "@dfinity/principal": "^3.4.3",
         "@iarna/toml": "^2.2.5",
         "@wasmer/wasi": "1.2.2",
         "axios": "^1.13.2",
