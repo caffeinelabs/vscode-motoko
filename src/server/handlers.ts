@@ -1192,7 +1192,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return results;
     });
 
-    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents));
+    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents, notify));
 
     function findImportUri(
         context: Context,

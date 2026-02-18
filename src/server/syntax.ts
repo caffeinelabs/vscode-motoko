@@ -275,6 +275,129 @@ export function matchNode<T>(
     return defaultValue;
 }
 
+// --- Typed AST matchers (shapes documented from `astjs.ml`) ---
+
+export interface CallEMatch {
+    /** The function expression being called (e.g. a DotE for method calls, VarE for plain calls). */
+    funcExpr: Node;
+    /** The argument to the call (last element): TupE for 0 or 2+ args, or the value directly for 1 arg. Always a Node since it comes from `exp_js`. */
+    callArg: Node;
+}
+
+/**
+ * Matches a CallE (function call) node.
+ *
+ * From `astjs.ml`:
+ * ```
+ * CallE (par_opt, e1, ts, (_, e2)) ->
+ *   parenthetical par_opt ([ exp_js e1 ] @ inst ts @ [ exp_js !e2 ])
+ * ```
+ *
+ * Resulting args: `[funcExpr, ...typeInsts, callArg]`
+ * - `funcExpr`: the function expression being called (e.g. DotE, VarE)
+ * - `typeInsts`: zero or more explicit type instantiation nodes
+ * - `callArg`: the argument expression (always the last element)
+ */
+export function matchCallE(node: Node | undefined): CallEMatch | undefined {
+    if (!node || node.name !== 'CallE' || !node.args || node.args.length < 2)
+        return undefined;
+    const funcExpr = asNode(node.args[0]);
+    const callArg = asNode(node.args[node.args.length - 1]);
+    if (!funcExpr || !callArg) return undefined;
+    return { funcExpr, callArg };
+}
+
+export interface FuncParam {
+    name: string;
+    /** The type AST. Usually a Node but can be a string for `Any`, `Non`, `Pre`. */
+    type: AST;
+}
+
+export interface FuncTypeMatch {
+    params: FuncParam[];
+    /** Individual return types. Usually Nodes but can be strings for `Any`, `Non`, `Pre`. */
+    returnTypes: AST[];
+}
+
+/**
+ * Matches a Func typeRep and extracts structured parameter/return information.
+ *
+ * From `astjs.ml`:
+ * ```
+ * Func (s, c, tbs, at, rt) ->
+ *   [ func_sort_js s; control_js c ] @ List.map bind_js tbs
+ *   @ [ to_js_object "" (List.map typ_js at);
+ *       to_js_object "" (List.map typ_js rt) ]
+ * ```
+ *
+ * Resulting args: `[sort, control, ...typBinds, inputs, outputs]`
+ * - `sort`: sharing mode string (e.g. "Local", "Shared", "Shared Query")
+ * - `control`: return control string (e.g. "Returns", "Promises", "Replies")
+ * - `typBinds`: zero or more type parameter bindings (for generic functions)
+ * - `inputs` (2nd-to-last): `{ name: '', args: [param, ...] }` where each param
+ *   is a Named type `{ name: 'Name', args: [paramName: string, paramType: AST] }`
+ * - `outputs` (last): `{ name: '', args: [type, ...] }` containing return type(s)
+ */
+export function matchFuncTypeRep(
+    typeRep: Node | undefined,
+): FuncTypeMatch | undefined {
+    if (
+        !typeRep ||
+        typeRep.name !== 'Func' ||
+        !typeRep.args ||
+        typeRep.args.length < 4
+    )
+        return undefined;
+
+    const len = typeRep.args.length;
+    const inputsNode = asNode(typeRep.args[len - 2]);
+    const outputsNode = asNode(typeRep.args[len - 1]);
+
+    const params: FuncParam[] = (inputsNode?.args ?? [])
+        .map(asNode)
+        .filter(
+            (n): n is Node =>
+                !!n && n.name === 'Name' && !!n.args && n.args.length >= 2,
+        )
+        .map((n) => ({ name: String(n.args![0]), type: n.args![1] }));
+
+    return {
+        params,
+        returnTypes: (outputsNode?.args ?? []) as AST[],
+    };
+}
+
+/**
+ * Formats a typeRep AST node into a human-readable type string.
+ * Handles common Motoko type representations from `typ_js` in `astjs.ml`.
+ */
+export function formatTypeNode(ast: AST | undefined): string {
+    if (!ast) return '';
+    if (typeof ast === 'string') return ast;
+    if (typeof ast === 'number') return String(ast);
+    const node = asNode(ast);
+    if (!node) return '';
+    switch (node.name) {
+        case 'Con':
+        case 'Prim':
+            return String(node.args?.[0] ?? node.name);
+        case 'Opt':
+            return `?${formatTypeNode(node.args?.[0])}`;
+        case 'Array': {
+            const isMut = node.args?.[0] === 'Mut';
+            const elem = formatTypeNode(node.args?.[isMut ? 1 : 0]);
+            return isMut ? `[var ${elem}]` : `[${elem}]`;
+        }
+        case 'Tup':
+            return `(${(node.args ?? []).map(formatTypeNode).join(', ')})`;
+        case '':
+            if (node.args?.length === 1) return formatTypeNode(node.args[0]);
+            return `(${(node.args ?? []).map(formatTypeNode).join(', ')})`;
+        default:
+            return node.type || node.name;
+    }
+}
+
 export class Syntax {
     ast: AST;
 

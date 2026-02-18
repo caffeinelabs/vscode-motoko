@@ -1,14 +1,23 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { AST, Node } from 'motoko/lib/ast';
 import {
+    Position,
     SignatureHelp,
     SignatureHelpParams,
     CancellationToken,
     TextDocuments,
+    SignatureHelpTriggerKind,
 } from 'vscode-languageserver/node';
 
-import { getContext } from '../context';
-import { findNodes } from '../syntax';
+import { Context, getContext } from '../context';
+import {
+    asNode,
+    findNodes,
+    getIdName,
+    matchCallE,
+    matchFuncTypeRep,
+} from '../syntax';
+import { findMostSpecificNodeForPosition } from '../navigation';
 
 /**
  * Creates a handler for the onSignatureHelp event
@@ -18,6 +27,7 @@ import { findNodes } from '../syntax';
  */
 export function mkOnSignatureHelpHandler(
     documents: TextDocuments<TextDocument>,
+    notify: (uri: string | TextDocument) => void,
 ): (
     params: SignatureHelpParams,
     _token: CancellationToken,
@@ -29,10 +39,25 @@ export function mkOnSignatureHelpHandler(
         const { uri } = textDocument;
         const doc = documents.get(uri);
         if (!doc) return null;
-        const { astResolver } = getContext(uri);
+        const ctx = getContext(uri);
+        const { astResolver } = ctx;
+        if (params.context?.triggerKind !== SignatureHelpTriggerKind.Invoked)
+            notify(uri); // Document has changed, make sure we have up to date AST
         const status = astResolver.requestTyped(uri);
         if (!status || !status.ast) return null;
         const cursorOffset = doc.offsetAt(position);
+
+        // Try the new typeRep-based strategy first (handles contextual dot and typed calls)
+        const typeRepResult = tryTypeRepSignatureHelp(
+            status.ast,
+            position,
+            doc,
+            cursorOffset,
+            ctx,
+        );
+        if (typeRepResult) return typeRepResult;
+
+        // Fall back to the original text-based strategy
         const funcNodes = findFuncNodes(status.ast, doc, cursorOffset);
         if (!funcNodes.length) return null;
         const text = doc.getText();
@@ -63,6 +88,98 @@ export function mkOnSignatureHelpHandler(
             activeSignature: 0,
             activeParameter: activeParameter,
         };
+    };
+}
+
+/**
+ * Attempts signature help using the typeRep from the CallE function expression.
+ * Uses typeRep for structural validation (Func check, contextual dot / self detection)
+ * and the compiler-provided `type` string for display.
+ */
+function tryTypeRepSignatureHelp(
+    ast: AST,
+    position: Position,
+    doc: TextDocument,
+    cursorOffset: number,
+    ctx: Context,
+): SignatureHelp | undefined {
+    const paramsRe = /^.*?\((.+)\)\s*->/;
+
+    const callNode = findMostSpecificNodeForPosition(
+        ast,
+        position,
+        (n) => n.name === 'CallE',
+    );
+    const call = matchCallE(callNode);
+    if (!call) return undefined;
+
+    const { funcExpr } = call;
+    if (!funcExpr.typeRep || !funcExpr.type) return undefined;
+
+    const isContextDot = !!ctx.contextualDotModule?.(funcExpr);
+
+    const funcType = matchFuncTypeRep(funcExpr.typeRep);
+    if (!funcType) return undefined;
+
+    const funcName = getIdName(asNode(funcExpr.args?.[1]));
+    if (!funcName) return undefined;
+
+    // Parse parameters from the compiler-provided type string
+    const typeStr = funcExpr.type;
+    const paramsMatch = typeStr.match(paramsRe);
+    if (!paramsMatch) return undefined;
+
+    // Split into individual param strings, reusing the original bracket-aware splitter
+    const allParamsStr = paramsMatch[1];
+    const allParamOffsets = splitParams(allParamsStr, 0);
+    const allParamStrings = allParamOffsets.map(([s, e]) =>
+        allParamsStr.slice(s, e).trim(),
+    );
+
+    // For contextual dot, skip the first 'self' parameter
+    const visibleParamStrings = isContextDot
+        ? allParamStrings.slice(1)
+        : allParamStrings;
+
+    // Rebuild label: funcName(visible params) -> returnType
+    const returnTypeStr = typeStr.slice(paramsMatch[0].length).trim();
+    const visibleParamsStr = visibleParamStrings.join(', ');
+    const label = returnTypeStr
+        ? `${funcName}(${visibleParamsStr}) -> ${returnTypeStr}`
+        : `${funcName}(${visibleParamsStr})`;
+
+    // Compute parameter offsets within the label
+    const funcParams = splitParams(
+        visibleParamsStr,
+        funcName.length + 1, // after "funcName("
+    );
+
+    // Find the opening parenthesis of the call in the source text
+    const text = doc.getText();
+    if (!funcExpr.end) return undefined;
+    const funcExprEndOffset = doc.offsetAt({
+        line: funcExpr.end[0] - 1,
+        character: funcExpr.end[1],
+    });
+    const parenOffset = text.indexOf('(', funcExprEndOffset);
+    if (parenOffset === -1 || parenOffset >= cursorOffset) return undefined;
+
+    const activeParameter = getActiveParamIndex(
+        parenOffset,
+        text,
+        cursorOffset,
+    );
+    if (activeParameter === undefined) return undefined;
+
+    return {
+        signatures: [
+            {
+                label,
+                parameters: funcParams.map((p) => ({ label: p })),
+            },
+        ],
+        activeSignature: 0,
+        activeParameter,
     };
 }
 
