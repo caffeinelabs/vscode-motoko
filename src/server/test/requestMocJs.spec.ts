@@ -6,8 +6,9 @@ import {
     defaultBeforeAll,
     defaultAfterAll,
     openTextDocuments,
+    waitForDiagnostics,
 } from './helpers';
-import { Connection, Diagnostic } from 'vscode-languageserver';
+import { Connection } from 'vscode-languageserver';
 import { getContext } from '../context';
 import * as fs from 'fs';
 import { settings } from '../globals';
@@ -52,22 +53,11 @@ describe('request moc.js', () => {
             const textDocuments = new Map<string, TextDocument>();
             const filePath = join(rootPath, 'Main.mo');
             const fileUri = URI.parse(filePath).toString();
+
+            const diagsPromise = waitForDiagnostics(client, fileUri);
             await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
+            const diags = await diagsPromise;
 
-            // Wait for diagnostics
-            const diags = await new Promise<Diagnostic[]>((resolve) => {
-                const disposable = client.onNotification(
-                    'textDocument/publishDiagnostics',
-                    (params: { uri: string; diagnostics: Diagnostic[] }) => {
-                        if (params.uri === fileUri) {
-                            disposable.dispose();
-                            resolve(params.diagnostics);
-                        }
-                    },
-                );
-            });
-
-            // Should receive diagnostics with expected type error from Main.mo
             expect(diags.length).toBeGreaterThan(0);
         });
 

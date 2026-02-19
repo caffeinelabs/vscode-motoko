@@ -7,7 +7,7 @@ import {
 import { URI } from 'vscode-uri';
 import { clientInitParams, setupClientServer } from './mock';
 import { cwd } from 'node:process';
-import { wait, waitForNotification } from './helpers';
+import { waitForDiagnostics, waitForNotification } from './helpers';
 import { readFileSync } from 'node:fs';
 
 jest.setTimeout(60000);
@@ -47,14 +47,14 @@ describe('workspace symbol', () => {
 
         await serverInitialized;
 
+        const diagnosticsPromise = waitForDiagnostics(client, file.uri);
         await client.sendNotification('textDocument/didOpen', {
             textDocument: file.textDocument,
         });
-        await wait(0.5);
+        await diagnosticsPromise;
     });
     afterAll(async () => {
         await client.sendRequest('shutdown');
-        await wait(2);
         client.dispose();
         server.dispose();
     });
