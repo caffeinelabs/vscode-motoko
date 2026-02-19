@@ -1,4 +1,3 @@
-import { Node } from 'motoko/lib/ast';
 import {
     CompletionItem,
     CompletionItemKind,
@@ -14,7 +13,7 @@ import {
 } from './imports';
 import { getRelativeUri } from './utils';
 import { findMostSpecificNodeForPosition } from './navigation';
-import { matchNode, Program } from './syntax';
+import { asDotE, Program } from './syntax';
 
 export function addContextualDotCompletions(
     items: CompletionItem[],
@@ -29,15 +28,11 @@ export function addContextualDotCompletions(
         position,
         (n) => n.name === 'DotE',
     );
-    const receiverExp = matchNode(
-        cursorNode,
-        'DotE',
-        (receiver: Node) => receiver,
-    );
-    if (!receiverExp) return;
+    const dotE = asDotE(cursorNode);
+    if (!dotE) return;
 
     context
-        .contextualDotSuggestions?.(receiverExp, program)
+        .contextualDotSuggestions?.(dotE.receiver, program)
         ?.forEach((suggestion) => {
             // Note: suggestion.moduleUri is either an absolute path with .mo extension or `mo:` URI like "mo:core/Array"
             const importUri = importUriFromCompilerUri(suggestion.moduleUri);
