@@ -144,7 +144,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             console.log(`Running \`${command}\` in directory: ${directory}`);
             const result = await new Promise<string>((resolve, reject) =>
                 exec(command, { cwd: directory }, (err, stdout) =>
-                    // @ts-ignore
+                    // @ts-expect-error toString accepts encoding
                     err ? reject(err) : resolve(stdout.toString('utf8')),
                 ),
             );
@@ -536,7 +536,12 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                             }
                             Object.entries(dfxConfig.canisters).forEach(
                                 ([name, canister]) => {
-                                    if (!aliases.hasOwnProperty(name)) {
+                                    if (
+                                        !Object.prototype.hasOwnProperty.call(
+                                            aliases,
+                                            name,
+                                        )
+                                    ) {
                                         const id = canister.remote?.id?.local;
                                         if (id) {
                                             aliases[name] = id;
@@ -1345,7 +1350,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     // containing the current cursor position.
                     function relevantBlockNode(
                         cursorPosition: Position,
-                    ): (node: Node, parents: Node[]) => Boolean {
+                    ): (node: Node, parents: Node[]) => boolean {
                         return (node: Node, parents: Node[]) => {
                             // Take function parameters if the cursor is inside of function body
                             if (node.name === 'ParP') {
@@ -1394,7 +1399,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     function relevantIdentNode(
                         node: Node,
                         parents: Node[],
-                    ): Boolean {
+                    ): boolean {
                         const criteria =
                             // Take variable identifiers and function names.
                             // They are enclosed in `VarP` and `VarD` nodes
@@ -1577,7 +1582,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 const code = diagnostic.code;
                 if (typeof code === 'string' && !codes.includes(code)) {
                     codes.push(code);
-                    if (errorCodes.hasOwnProperty(code)) {
+                    if (
+                        Object.prototype.hasOwnProperty.call(errorCodes, code)
+                    ) {
                         // Show explanation without Markdown heading
                         docs.add(errorCodes[code].replace(/^# M[0-9]+\s+/, ''));
                     }

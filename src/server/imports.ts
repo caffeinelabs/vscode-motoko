@@ -197,9 +197,9 @@ function getImportInfo(
     uri = uri.slice(0, -'.mo'.length);
     // Resolve package import paths
     for (const regex of [
-        /\.vessel\/([^\/]+)\/[^\/]+\/src\/(.+)/,
-        /\.mops\/([^%\/]+)%40[^\/]+\/src\/(.+)/,
-        /\.mops\/_github\/([^%\/]+)%40[^\/]+\/src\/(.+)/,
+        /\.vessel\/([^/]+)\/[^/]+\/src\/(.+)/,
+        /\.mops\/([^%/]+)%40[^/]+\/src\/(.+)/,
+        /\.mops\/_github\/([^%/]+)%40[^/]+\/src\/(.+)/,
     ]) {
         const match = regex.exec(uri);
         if (match) {
