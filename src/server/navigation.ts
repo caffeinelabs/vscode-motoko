@@ -6,9 +6,12 @@ import {
     findNodes,
     getIdName,
     matchNode,
+    matchDecField,
+    matchVisibility,
     asNode,
     findInPattern,
     Program,
+    Visibility,
 } from './syntax';
 import { resolveImportUri, importUriFromCompilerUri } from './imports';
 import { LocationSet } from './utils';
@@ -17,8 +20,6 @@ export interface Reference {
     uri: string;
     node: Node;
 }
-
-type Visibility = 'Public' | 'Private' | 'System';
 
 export interface Definition {
     uri: string;
@@ -33,16 +34,6 @@ interface Search {
     name: string;
     start?: Position;
     end?: Position;
-}
-
-function matchVisibility(vis: AST): Visibility {
-    if (vis === 'Public' || vis === 'Private' || vis === 'System') {
-        return vis;
-    }
-
-    // `astjs.ml` serializes either as a string (handled above) or an object
-    // representing that it's public.
-    return 'Public';
 }
 
 function spanToPos(span: Span | undefined): Position | undefined {
@@ -840,28 +831,22 @@ export function searchObject(
                         }
                     );
                 }) ||
-                matchNode(arg, 'DecField', (dec: Node, vis: AST) =>
-                    searchDeclaration(
-                        reference,
-                        search,
-                        dec,
-                        matchVisibility(vis),
-                    ),
+                matchDecField(arg, ({ dec, visibility }) =>
+                    searchDeclaration(reference, search, dec, visibility),
                 ) ||
                 matchNode(
                     arg,
                     'ObjBlockE',
                     (_sort: string, ...fields: Node[]) => {
                         for (const field of fields) {
-                            const definition = matchNode(
+                            const definition = matchDecField(
                                 field,
-                                'DecField',
-                                (dec: Node, vis: AST) =>
+                                ({ dec, visibility }) =>
                                     searchDeclaration(
                                         reference,
                                         search,
                                         dec,
-                                        matchVisibility(vis),
+                                        visibility,
                                     ),
                             );
                             if (definition) {
@@ -907,28 +892,22 @@ export function searchObject(
                     arg,
                     searchVisibility(arg),
                 ) ||
-                matchNode(arg, 'DecField', (dec: Node, vis: AST) =>
-                    searchTypeBinding(
-                        reference,
-                        search,
-                        dec,
-                        matchVisibility(vis),
-                    ),
+                matchDecField(arg, ({ dec, visibility }) =>
+                    searchTypeBinding(reference, search, dec, visibility),
                 ) ||
                 matchNode(
                     arg,
                     'ObjBlockE',
                     (_sort: string, ...fields: Node[]) => {
                         for (const field of fields) {
-                            const definition = matchNode(
+                            const definition = matchDecField(
                                 field,
-                                'DecField',
-                                (dec: Node, vis: AST) =>
+                                ({ dec, visibility }) =>
                                     searchTypeBinding(
                                         reference,
                                         search,
                                         dec,
-                                        matchVisibility(vis),
+                                        visibility,
                                     ),
                             );
                             if (definition) {

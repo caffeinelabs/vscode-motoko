@@ -8,7 +8,7 @@ import {
     TextEdit,
 } from 'vscode-languageserver/node';
 import { Context, getContext } from './context';
-import { Import, Program, getIdName, matchNode } from './syntax';
+import { Import, Program, getIdName, asDecField, matchNode } from './syntax';
 import { URI } from 'vscode-uri';
 import { formatMotoko, getAbsoluteUri, getRelativeUri } from './utils';
 
@@ -19,22 +19,12 @@ export function extractFields(
     const fieldMap = new MultiMap<string, CompletionItem>(Set);
     matchNode(ast, 'ObjBlockE', (_s: string, _t: string, ...fields: Node[]) =>
         fields.forEach((field) => {
-            if (field.name !== 'DecField') {
-                console.error(
-                    'Error: expected `DecField`, received',
-                    field.name,
-                );
+            const df = asDecField(field);
+            if (!df || df.visibility !== 'Public') {
                 return;
             }
-            const [dec, visibility] = field.args!;
-            const doc = field.doc;
-            // visibility is 'Public' (string) or { name: 'Public', args: [...] } (for @deprecated annotation)
-            const isPublic =
-                visibility === 'Public' ||
-                (visibility as Node)?.name === 'Public';
-            if (!isPublic) {
-                return;
-            }
+            const { node, dec } = df;
+            const doc = node.doc;
             matchNode(dec, 'LetD', (pat: Node, exp: Node) => {
                 const name = matchNode(pat, 'VarP', (field: Node) => field);
                 if (name) {

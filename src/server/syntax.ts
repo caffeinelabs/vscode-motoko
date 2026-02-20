@@ -115,18 +115,12 @@ export function fromAST(ast: AST): Syntax {
 
         const obj = new ObjBlock(ast, sort);
         fields.forEach((field) => {
-            if (field.name !== 'DecField') {
-                console.error(
-                    'Error: expected object with `name: "DecField"`, received',
-                    field,
-                );
+            const df = asDecField(field);
+            if (!df) {
+                console.error('Error: expected `DecField`, received', field);
                 return;
             }
-            const [dec, _visibility] = field.args!;
-            // if (visibility !== 'Public') {
-            //     return;
-            // }
-            obj.fields.push(...getFieldsFromAST(dec));
+            obj.fields.push(...getFieldsFromAST(df.dec));
         });
         return obj;
     }
@@ -166,7 +160,7 @@ function getFieldsFromAST(ast: AST): Field[] {
                 const name = getIdName(id)!;
                 const cls = new Class(ast, name, sort);
                 decs.forEach((ast) => {
-                    matchNode(ast, 'DecField', (dec: Node) => {
+                    matchDecField(ast, ({ dec }) => {
                         cls.fields.push(...getFieldsFromAST(dec));
                     });
                 });
@@ -396,6 +390,60 @@ export function formatTypeNode(ast: AST | undefined): string {
         default:
             return node.type || node.name;
     }
+}
+export type Visibility = 'Public' | 'Private' | 'System';
+
+export interface NodeMatch {
+    node: Node;
+}
+
+export interface DecFieldMatch extends NodeMatch {
+    dec: Node;
+    visibility: Visibility;
+    stab: AST;
+}
+
+export interface DotEMatch extends NodeMatch {
+    receiver: Node;
+    id: Node; // ID node on RHS
+}
+
+// Mirrors `vis_js` in `astjs.ml`: either a plain string or an object with `name`.
+export function matchVisibility(vis: AST): Visibility {
+    if (vis === 'Public' || vis === 'Private' || vis === 'System') {
+        return vis;
+    }
+
+    // `astjs.ml` serializes either as a string (handled above) or an object
+    // representing that it's public.
+    return 'Public';
+}
+
+// Mirrors `dec_field'_js` in `astjs.ml`: args are `[dec, vis, stab]`.
+export function asDecField(ast: AST | undefined): DecFieldMatch | undefined {
+    return matchNode(ast, 'DecField', (dec: Node, vis: AST, stab: AST) => ({
+        node: ast as Node,
+        dec,
+        visibility: matchVisibility(vis),
+        stab,
+    }));
+}
+
+// Mirrors `DotE` in `astjs.ml`: args are `[exp, id]`.
+export function asDotE(ast: AST | undefined): DotEMatch | undefined {
+    return matchNode(ast, 'DotE', (receiver: Node, id: Node) => ({
+        node: ast as Node,
+        receiver,
+        id,
+    }));
+}
+
+export function matchDecField<T>(
+    ast: AST | undefined,
+    fn: (match: DecFieldMatch) => T,
+): T | undefined {
+    const df = asDecField(ast);
+    return df ? fn(df) : undefined;
 }
 
 export class Syntax {

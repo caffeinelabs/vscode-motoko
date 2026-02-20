@@ -40,7 +40,6 @@ export function waitForDiagnostics(
             disposable.dispose();
             reject(new Error(`Timeout waiting for diagnostics for ${uri}`));
         }, timeout);
-        // TODO: do we even need this?
         const disposable = client.onNotification(
             'textDocument/publishDiagnostics',
             (params: { uri: string; diagnostics: Diagnostic[] }) => {
