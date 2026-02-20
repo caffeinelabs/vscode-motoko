@@ -6,14 +6,27 @@ on:
     - published
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-    - name: Publish
+    - name: Install
+      run: npm install
+    - name: Package
+      id: package
       run: |
-        npm install
-        npm run publish
+        npx vsce package
+        echo "vsix=$(ls *.vsix)" >> "$GITHUB_OUTPUT"
+    - name: Publish
+      run: npx vsce publish --packagePath ${{ steps.package.outputs.vsix }}
       env:
         VSCE_PAT: ${{ secrets.VSCE_PAT }}
+    - name: Upload Release Asset
+      if: github.event_name == 'release'
+      run: gh release upload ${{ github.event.release.tag_name }} ${{ steps.package.outputs.vsix }}
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
