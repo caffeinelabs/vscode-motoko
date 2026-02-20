@@ -59,6 +59,7 @@ import {
     getContext,
     resetContexts,
 } from './context';
+import { addContextualDotCompletions } from './completions';
 import DfxResolver from './dfx';
 import {
     importTextEdit,
@@ -1230,6 +1231,17 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             const context = getContext(uri);
             const status = context.astResolver.requestTyped(uri);
             const program = status?.program;
+
+            if (program) {
+                addContextualDotCompletions(
+                    list.items,
+                    program,
+                    context,
+                    position,
+                    uri,
+                );
+            }
+
             const offset = doc.offsetAt(position);
             const prefix = doc.getText(
                 Range.create(Position.create(0, 0), position),

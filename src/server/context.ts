@@ -16,7 +16,10 @@ type MocJsInfo = {
 type Version = string | undefined;
 
 // Hide version-dependent methods from direct access on motoko
-type OptionalCompilerFunctions = 'checkWithScopeCache';
+type OptionalCompilerFunctions =
+    | 'contextualDotModule'
+    | 'contextualDotSuggestions'
+    | 'checkWithScopeCache';
 type PublicMotoko = Omit<Motoko, OptionalCompilerFunctions>;
 
 /**
@@ -36,6 +39,12 @@ export class Context {
     public readonly checkWithScopeCache:
         | Motoko['checkWithScopeCache']
         | undefined;
+    public readonly contextualDotSuggestions:
+        | Motoko['contextualDotSuggestions']
+        | undefined;
+    public readonly contextualDotModule:
+        | Motoko['contextualDotModule']
+        | undefined;
 
     constructor(uri: string, motoko: Motoko, mocJsInfo?: MocJsInfo) {
         this.uri = uri;
@@ -44,8 +53,8 @@ export class Context {
         this.astResolver = new AstResolver(this);
         this.importResolver = new ImportResolver(this);
 
-        const unavailable: string[] = [];
-        const has = (name: string) => {
+        const unavailable: OptionalCompilerFunctions[] = [];
+        const has = (name: OptionalCompilerFunctions) => {
             const available = typeof motoko.compiler?.[name] === 'function';
             if (!available) unavailable.push(name);
             return available;
@@ -54,6 +63,12 @@ export class Context {
         // Optional compiler functions for backwards compatibility with older moc.js versions
         this.checkWithScopeCache = has('checkWithScopeCache')
             ? motoko.checkWithScopeCache.bind(motoko)
+            : undefined;
+        this.contextualDotSuggestions = has('contextualDotSuggestions')
+            ? motoko.contextualDotSuggestions.bind(motoko)
+            : undefined;
+        this.contextualDotModule = has('contextualDotModule')
+            ? motoko.contextualDotModule.bind(motoko)
             : undefined;
 
         if (unavailable.length > 0) {

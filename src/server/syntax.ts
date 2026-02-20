@@ -281,6 +281,11 @@ export interface DecFieldMatch extends NodeMatch {
     stab: AST;
 }
 
+export interface DotEMatch extends NodeMatch {
+    receiver: Node;
+    id: Node; // ID node on RHS
+}
+
 // Mirrors `vis_js` in `astjs.ml`: either a plain string or an object with `name`.
 export function matchVisibility(vis: AST): Visibility {
     if (vis === 'Public' || vis === 'Private' || vis === 'System') {
@@ -299,6 +304,15 @@ export function asDecField(ast: AST | undefined): DecFieldMatch | undefined {
         dec,
         visibility: matchVisibility(vis),
         stab,
+    }));
+}
+
+// Mirrors `DotE` in `astjs.ml`: args are `[exp, id]`.
+export function asDotE(ast: AST | undefined): DotEMatch | undefined {
+    return matchNode(ast, 'DotE', (receiver: Node, id: Node) => ({
+        node: ast as Node,
+        receiver,
+        id,
     }));
 }
 
