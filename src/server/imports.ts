@@ -9,6 +9,7 @@ import {
 } from 'vscode-languageserver/node';
 import { Context, getContext } from './context';
 import { Import, Program, getIdName, asDecField, matchNode } from './syntax';
+import { URI } from 'vscode-uri';
 import { formatMotoko, getAbsoluteUri, getRelativeUri } from './utils';
 
 export function extractFields(
@@ -172,6 +173,17 @@ export default class ImportResolver {
     }
 
     /**
+     * Finds a specific importable field by label in a module.
+     * @param uri Absolute file import URI (e.g. `mo:package/File`, `canister:alias`, `file:///Lib`)
+     * @param label The field label to find
+     */
+    getField(uri: string, label: string): CompletionItem | undefined {
+        const fsUri = this.getFileSystemURI(uri);
+        if (!fsUri) return undefined;
+        return this.getFields(fsUri).find((f) => f.label === label);
+    }
+
+    /**
      * Converts a resolved import path into the corresponding file system URI.
      * @param uri Absolute file import URI (e.g. `mo:package/File`, `canister:alias`, `file:///Lib`)
      */
@@ -183,7 +195,7 @@ export default class ImportResolver {
     }
 }
 
-function getImportName(path: string): string {
+export function getImportName(path: string): string {
     return pascalCase(/([^/]+)$/i.exec(path)?.[1] || '');
 }
 
@@ -352,6 +364,22 @@ export function hasImportWithName(
     );
 }
 
+function stripMoExtension(path: string): string {
+    return path.endsWith('.mo') ? path.slice(0, -3) : path;
+}
+
+/**
+ * Converts a compiler virtual path (e.g. `/Users/.../libA.mo`)
+ * to a module URI (e.g. `file:///Users/.../libA`).
+ * Scheme-based URIs (e.g. `mo:core/Array`) are returned as-is.
+ */
+export function importUriFromCompilerUri(moduleUri: string): string {
+    if (moduleUri.includes(':')) {
+        return moduleUri;
+    }
+    return URI.file(stripMoExtension(moduleUri)).toString();
+}
+
 /**
  * Resolves a Motoko import path to a full module URI.
  * Scheme-based paths (e.g. `mo:core/Array`) are returned as-is.
@@ -365,6 +393,20 @@ export function resolveImportUri(
         return importPath;
     }
     return getAbsoluteUri(documentUri, '..', importPath);
+}
+
+/**
+ * Checks if any existing import references the same module as the given module URI.
+ */
+export function hasImportForModule(
+    imports: Import[] | undefined,
+    documentUri: string,
+    moduleUri: string,
+): boolean {
+    if (!imports) return false;
+    return imports.some(
+        (i) => resolveImportUri(documentUri, i.path) === moduleUri,
+    );
 }
 
 /**

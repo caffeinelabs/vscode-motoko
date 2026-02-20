@@ -10,9 +10,10 @@ import {
     matchVisibility,
     asNode,
     findInPattern,
+    Program,
     Visibility,
 } from './syntax';
-import { resolveImportUri } from './imports';
+import { resolveImportUri, importUriFromCompilerUri } from './imports';
 import { LocationSet } from './utils';
 
 export interface Reference {
@@ -249,6 +250,17 @@ export function findDefinitions(
         return [];
     }
     const reference: Reference = { uri, node };
+
+    const contextDotDef = tryContextDotDefinition(
+        context,
+        node,
+        status.program,
+        uri,
+    );
+    if (contextDotDef) {
+        return [contextDotDef];
+    }
+
     const importDefinition = followImport(context, reference);
     if (importDefinition) {
         return [importDefinition];
@@ -275,6 +287,53 @@ export function findDefinitions(
         );
     }
     return definitions;
+}
+
+function resolveModuleImportUri(
+    moduleNameOrUri: string,
+    program: Program | undefined,
+    documentUri: string,
+): string {
+    // Most common case: try to resolve as import name
+    for (const imp of program?.imports ?? []) {
+        if (imp.name === moduleNameOrUri) {
+            return resolveImportUri(documentUri, imp.path);
+        }
+    }
+
+    // Fallback: treat it as an compiler URI / absolute path
+    return importUriFromCompilerUri(moduleNameOrUri);
+}
+
+/**
+ * Try to resolve a context dot method to its module definition.
+ * For `obj.method(...)` calls, this finds the function in the source module.
+ */
+function tryContextDotDefinition(
+    context: Context,
+    node: Node,
+    program: Program | undefined,
+    documentUri: string,
+): Definition | undefined {
+    const dotModule = context.contextualDotModule?.(node);
+    if (!dotModule) return undefined;
+
+    const moduleImportUri = resolveModuleImportUri(
+        dotModule.moduleNameOrUri,
+        program,
+        documentUri,
+    );
+    const moduleUri = context.importResolver.getFileSystemURI(moduleImportUri);
+    if (!moduleUri) return undefined;
+
+    const moduleStatus = context.astResolver.request(moduleUri, false);
+    const exportNode = asNode(moduleStatus?.program?.export?.ast);
+    if (!exportNode) return undefined;
+
+    return searchObject(
+        { uri: moduleUri, node: exportNode },
+        { type: 'variable', name: dotModule.funcName },
+    );
 }
 
 function searchTypeFromIdContext(node: Node): 'variable' | 'type' {
