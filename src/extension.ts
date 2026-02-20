@@ -160,7 +160,7 @@ function setupTests(context: ExtensionContext) {
                     continue;
                 }
                 switch (getType(item)) {
-                    case ItemType.File:
+                    case ItemType.File: {
                         const start = Date.now();
                         try {
                             run.started(item);
@@ -189,6 +189,7 @@ function setupTests(context: ExtensionContext) {
                         //     await parseTestsInFileContents(test);
                         // }
                         break;
+                    }
                     // case ItemType.TestCase:
                     //     break;
                 }
