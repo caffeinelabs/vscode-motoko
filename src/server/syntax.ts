@@ -361,36 +361,6 @@ export function matchFuncTypeRep(
     };
 }
 
-/**
- * Formats a typeRep AST node into a human-readable type string.
- * Handles common Motoko type representations from `typ_js` in `astjs.ml`.
- */
-export function formatTypeNode(ast: AST | undefined): string {
-    if (!ast) return '';
-    if (typeof ast === 'string') return ast;
-    if (typeof ast === 'number') return String(ast);
-    const node = asNode(ast);
-    if (!node) return '';
-    switch (node.name) {
-        case 'Con':
-        case 'Prim':
-            return String(node.args?.[0] ?? node.name);
-        case 'Opt':
-            return `?${formatTypeNode(node.args?.[0])}`;
-        case 'Array': {
-            const isMut = node.args?.[0] === 'Mut';
-            const elem = formatTypeNode(node.args?.[isMut ? 1 : 0]);
-            return isMut ? `[var ${elem}]` : `[${elem}]`;
-        }
-        case 'Tup':
-            return `(${(node.args ?? []).map(formatTypeNode).join(', ')})`;
-        case '':
-            if (node.args?.length === 1) return formatTypeNode(node.args[0]);
-            return `(${(node.args ?? []).map(formatTypeNode).join(', ')})`;
-        default:
-            return node.type || node.name;
-    }
-}
 export type Visibility = 'Public' | 'Private' | 'System';
 
 export interface NodeMatch {
