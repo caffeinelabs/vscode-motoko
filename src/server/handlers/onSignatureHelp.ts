@@ -10,14 +10,12 @@ import {
 } from 'vscode-languageserver/node';
 
 import { Context, getContext } from '../context';
+import { asNode, findNodes, getIdName, matchCallE, Program } from '../syntax';
 import {
-    asNode,
-    findNodes,
-    getIdName,
-    matchCallE,
-    matchFuncTypeRep,
-} from '../syntax';
-import { findMostSpecificNodeForPosition } from '../navigation';
+    Definition,
+    findMostSpecificNodeForPosition,
+    tryContextDotDefinition,
+} from '../navigation';
 
 /**
  * Creates a handler for the onSignatureHelp event
@@ -47,13 +45,15 @@ export function mkOnSignatureHelpHandler(
         if (!status || !status.ast) return null;
         const cursorOffset = doc.offsetAt(position);
 
-        // Try the new typeRep-based strategy first (handles contextual dot and typed calls)
+        // Try the definition-based strategy first (handles contextual dot calls)
         const typeRepResult = tryTypeRepSignatureHelp(
             status.ast,
             position,
             doc,
             cursorOffset,
             ctx,
+            status.program,
+            uri,
         );
         if (typeRepResult) return typeRepResult;
 
@@ -92,9 +92,8 @@ export function mkOnSignatureHelpHandler(
 }
 
 /**
- * Attempts signature help using the typeRep from the CallE function expression.
- * Uses typeRep for structural validation (Func check, contextual dot / self detection)
- * and the compiler-provided `type` string for display.
+ * Attempts signature help for contextual dot calls by finding the function
+ * definition and extracting parameter info from its pattern nodes.
  */
 function tryTypeRepSignatureHelp(
     ast: AST,
@@ -102,9 +101,9 @@ function tryTypeRepSignatureHelp(
     doc: TextDocument,
     cursorOffset: number,
     ctx: Context,
+    program: Program | undefined,
+    documentUri: string,
 ): SignatureHelp | undefined {
-    const paramsRe = /^.*?\((.+)\)\s*->/;
-
     const callNode = findMostSpecificNodeForPosition(
         ast,
         position,
@@ -114,45 +113,33 @@ function tryTypeRepSignatureHelp(
     if (!call) return undefined;
 
     const { funcExpr } = call;
-    if (!funcExpr.typeRep || !funcExpr.type) return undefined;
 
-    const isContextDot = !!ctx.contextualDotModule?.(funcExpr);
+    const def = tryContextDotDefinition(ctx, funcExpr, program, documentUri);
+    if (!def) return undefined;
 
-    const funcType = matchFuncTypeRep(funcExpr.typeRep);
-    if (!funcType) return undefined;
-
-    const funcName = getIdName(asNode(funcExpr.args?.[1]));
+    const funcName = def.name;
     if (!funcName) return undefined;
 
-    // Parse parameters from the compiler-provided type string
-    const typeStr = funcExpr.type;
-    const paramsMatch = typeStr.match(paramsRe);
-    if (!paramsMatch) return undefined;
+    const params = extractFuncParams(def);
+    if (!params) return undefined;
 
-    // Split into individual param strings, reusing the original bracket-aware splitter
-    const allParamsStr = paramsMatch[1];
-    const allParamOffsets = splitParams(allParamsStr, 0);
-    const allParamStrings = allParamOffsets.map(([s, e]) =>
-        allParamsStr.slice(s, e).trim(),
+    // Skip the first 'self' parameter (contextual dot always has self)
+    const visibleParams = params.slice(1);
+
+    // Get return type from the FuncE body's type string
+    const returnType = extractReturnType(def.body);
+
+    // Build the signature label
+    const paramStrings = visibleParams.map((p) =>
+        p.name ? `${p.name} : ${p.type}` : p.type,
     );
-
-    // For contextual dot, skip the first 'self' parameter
-    const visibleParamStrings = isContextDot
-        ? allParamStrings.slice(1)
-        : allParamStrings;
-
-    // Rebuild label: funcName(visible params) -> returnType
-    const returnTypeStr = typeStr.slice(paramsMatch[0].length).trim();
-    const visibleParamsStr = visibleParamStrings.join(', ');
-    const label = returnTypeStr
-        ? `${funcName}(${visibleParamsStr}) -> ${returnTypeStr}`
+    const visibleParamsStr = paramStrings.join(', ');
+    const label = returnType
+        ? `${funcName}(${visibleParamsStr}) -> ${returnType}`
         : `${funcName}(${visibleParamsStr})`;
 
-    // Compute parameter offsets within the label
-    const funcParams = splitParams(
-        visibleParamsStr,
-        funcName.length + 1, // after "funcName("
-    );
+    // Compute parameter label offsets within the built label
+    const paramOffsets = computeParamOffsets(paramStrings, funcName.length + 1);
 
     // Find the opening parenthesis of the call in the source text
     const text = doc.getText();
@@ -175,12 +162,117 @@ function tryTypeRepSignatureHelp(
         signatures: [
             {
                 label,
-                parameters: funcParams.map((p) => ({ label: p })),
+                parameters: paramOffsets.map((p) => ({ label: p })),
             },
         ],
         activeSignature: 0,
         activeParameter,
     };
+}
+
+interface ParamInfo {
+    name: string | undefined;
+    type: string;
+}
+
+/**
+ * Extracts parameter names and types from a function definition's body node.
+ * Expects `def.body` to be a FuncE whose param pattern has typed sub-nodes.
+ */
+function extractFuncParams(def: Definition): ParamInfo[] | undefined {
+    const body = def.body;
+    if (body.name !== 'FuncE' || !body.args) return undefined;
+
+    // FuncE args: [typeStr, sharedPat, name, ...typBinds, paramPat, retType, sugar, bodyExpr]
+    const paramPatNode = asNode(body.args[body.args.length - 4]);
+    if (!paramPatNode) return undefined;
+
+    return extractParamsFromPattern(paramPatNode);
+}
+
+function extractParamsFromPattern(pat: Node): ParamInfo[] {
+    // TupP — multiple parameters
+    if (pat.name === 'TupP' && pat.args) {
+        return pat.args
+            .map(asNode)
+            .filter((n): n is Node => !!n)
+            .map(extractSingleParam);
+    }
+    // Single parameter (not wrapped in TupP)
+    return [extractSingleParam(pat)];
+}
+
+function extractSingleParam(pat: Node): ParamInfo {
+    // Unwrap ParP (parenthesized)
+    const unwrapped = unwrapParP(pat);
+    return {
+        name: findParamName(unwrapped),
+        type: unwrapped.type ?? '',
+    };
+}
+
+function unwrapParP(pat: Node): Node {
+    if (pat.name === 'ParP' && pat.args) {
+        const inner = asNode(pat.args[0]);
+        if (inner) return unwrapParP(inner);
+    }
+    return pat;
+}
+
+function findParamName(pat: Node): string | undefined {
+    if (pat.name === 'VarP' && pat.args) {
+        return getIdName(asNode(pat.args[0]));
+    }
+    if (pat.name === 'AnnotP' && pat.args) {
+        const inner = asNode(pat.args[0]);
+        if (inner) return findParamName(inner);
+    }
+    return undefined;
+}
+
+/**
+ * Extracts the return type string from a FuncE node.
+ *
+ * FuncE args layout:
+ *   [typeStr, sharedPat, name, ...typBinds, paramPat, returnTypeAnnot, sugarMarker, body]
+ *
+ * The return type annotation (args[-3]) is either a type node with `.type`
+ * (from syntax_typ_js) or the string "_" when no annotation was written.
+ * Falls back to the body expression's `.type` when the annotation is absent.
+ */
+function extractReturnType(funcE: Node): string | undefined {
+    if (funcE.name !== 'FuncE' || !funcE.args) return undefined;
+
+    const args = funcE.args;
+    const returnTypeAnnot = asNode(args[args.length - 3]);
+    if (returnTypeAnnot?.type) {
+        return returnTypeAnnot.type;
+    }
+
+    const body = asNode(args[args.length - 1]);
+    if (body?.type) {
+        return body.type;
+    }
+
+    return undefined;
+}
+
+/**
+ * Computes [start, end] label offsets for each parameter string within the
+ * signature label, given the offset where parameters start.
+ */
+function computeParamOffsets(
+    paramStrings: string[],
+    startOffset: number,
+): [number, number][] {
+    const offsets: [number, number][] = [];
+    let pos = startOffset;
+    for (let i = 0; i < paramStrings.length; i++) {
+        const len = paramStrings[i].length;
+        offsets.push([pos, pos + len]);
+        pos += len + 2; // ", " separator
+    }
+    return offsets;
 }
 
 /**
