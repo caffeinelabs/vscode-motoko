@@ -32,11 +32,13 @@ describe('signatureHelp contextDot', () => {
     });
     afterAll(async () => await defaultAfterAll(client, server));
 
-    /**
-     * Appends `expression` on a new line, sends didChange, then requests
-     * signature help with the cursor placed `cursorOffsetFromEnd` characters
-     * before the end of the appended expression.
-     */
+    function activeParamString(result: SignatureHelp): string {
+        const sig = result.signatures[0];
+        const param = sig.parameters![result.activeParameter!];
+        const [start, end] = param.label as [number, number];
+        return sig.label.slice(start, end);
+    }
+
     async function appendAndGetSignatureHelp(
         expression: string,
         cursorOffsetFromEnd: number,
@@ -71,7 +73,6 @@ describe('signatureHelp contextDot', () => {
     test('f1: type ( — self is the only param, no visible params', async () => {
         // obj.f1(|)  cursor between parens
         const result = await appendAndGetSignatureHelp('obj.f1()', 1);
-        console.log('f1:', JSON.stringify(result));
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe('f1() -> Nat');
         expect(result!.signatures[0].parameters).toEqual([]);
@@ -80,32 +81,29 @@ describe('signatureHelp contextDot', () => {
     test('f2: type ( — shows amount as 1st visible param', async () => {
         // obj.f2(|)  cursor between parens
         const result = await appendAndGetSignatureHelp('obj.f2()', 1);
-        console.log('f2:', JSON.stringify(result));
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe('f2(amount : Nat) -> Nat');
-        expect(result!.activeParameter).toBe(0);
+        expect(activeParamString(result!)).toBe('amount : Nat');
     });
 
     test('f3: type ( — shows prefix as 1st visible param', async () => {
         // obj.f3(|)  cursor between parens
         const result = await appendAndGetSignatureHelp('obj.f3()', 1);
-        console.log('f3 1st:', JSON.stringify(result));
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe(
             'f3(prefix : Text, count : Nat) -> Text',
         );
-        expect(result!.activeParameter).toBe(0);
+        expect(activeParamString(result!)).toBe('prefix : Text');
     });
 
     test('f3: type 1st arg then , — shows count as 2nd param', async () => {
         // obj.f3("hello", |)  cursor after comma
         const result = await appendAndGetSignatureHelp('obj.f3("hello", )', 1);
-        console.log('f3 2nd:', JSON.stringify(result));
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe(
             'f3(prefix : Text, count : Nat) -> Text',
         );
-        expect(result!.activeParameter).toBe(1);
+        expect(activeParamString(result!)).toBe('count : Nat');
     });
 
     // -- mo:core Map --
@@ -113,32 +111,37 @@ describe('signatureHelp contextDot', () => {
     test('Map.size: type ( — self only, no visible params', async () => {
         // m.size(|)  cursor between parens
         const result = await appendAndGetSignatureHelp('m.size()', 1);
-        console.log('Map.size:', JSON.stringify(result));
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe('size() -> Nat');
         expect(result!.signatures[0].parameters).toEqual([]);
     });
 
-    test('Map.get: type ( — shows compare and key params', async () => {
+    test('Map.get: type ( — primary sig omits implicits, secondary shows all', async () => {
         // m.get(|)  cursor between parens
         const result = await appendAndGetSignatureHelp('m.get()', 1);
-        console.log('Map.get:', JSON.stringify(result));
         expect(result).not.toBeNull();
-        expect(result!.signatures[0].label).toBe(
+        expect(result!.signatures).toHaveLength(2);
+        expect(result!.signatures[0].label).toBe('get(key : K) -> ?V');
+        expect(result!.signatures[1].label).toBe(
             'get(compare : (K, K) -> Order, key : K) -> ?V',
         );
-        expect(result!.activeParameter).toBe(0);
+        expect(result!.activeSignature).toBe(0);
+        expect(activeParamString(result!)).toBe('key : K');
     });
 
-    test('Map.add: type 1st arg then , — shows 2nd param', async () => {
+    test('Map.add: type 1st arg then , — highlights value in primary sig', async () => {
         // m.add("mykey", |)  cursor after comma
         const result = await appendAndGetSignatureHelp('m.add("mykey", )', 1);
-        console.log('Map.add 2nd:', JSON.stringify(result));
         expect(result).not.toBeNull();
+        expect(result!.signatures).toHaveLength(2);
         expect(result!.signatures[0].label).toBe(
+            'add(key : K, value : V) -> ()',
+        );
+        expect(result!.signatures[1].label).toBe(
             'add(compare : (K, K) -> Order, key : K, value : V) -> ()',
         );
-        expect(result!.activeParameter).toBe(1);
+        expect(result!.activeSignature).toBe(0);
+        expect(activeParamString(result!)).toBe('value : V');
     });
 
     // -- mo:core Array --
@@ -146,11 +149,10 @@ describe('signatureHelp contextDot', () => {
     test('Array.find: type ( — shows predicate param', async () => {
         // arr.find(|)  cursor between parens
         const result = await appendAndGetSignatureHelp('arr.find()', 1);
-        console.log('Array.find:', JSON.stringify(result));
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe(
             'find(predicate : T -> Bool) -> ?T',
         );
-        expect(result!.activeParameter).toBe(0);
+        expect(activeParamString(result!)).toBe('predicate : T -> Bool');
     });
 });

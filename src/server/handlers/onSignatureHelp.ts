@@ -7,6 +7,7 @@ import {
     CancellationToken,
     TextDocuments,
     SignatureHelpTriggerKind,
+    SignatureInformation,
 } from 'vscode-languageserver/node';
 
 import { Context, getContext } from '../context';
@@ -126,20 +127,7 @@ function tryTypeRepSignatureHelp(
     // Skip the first 'self' parameter (contextual dot always has self)
     const visibleParams = params.slice(1);
 
-    // Get return type from the FuncE body's type string
     const returnType = extractReturnType(def.body);
-
-    // Build the signature label
-    const paramStrings = visibleParams.map((p) =>
-        p.name ? `${p.name} : ${p.type}` : p.type,
-    );
-    const visibleParamsStr = paramStrings.join(', ');
-    const label = returnType
-        ? `${funcName}(${visibleParamsStr}) -> ${returnType}`
-        : `${funcName}(${visibleParamsStr})`;
-
-    // Compute parameter label offsets within the built label
-    const paramOffsets = computeParamOffsets(paramStrings, funcName.length + 1);
 
     // Find the opening parenthesis of the call in the source text
     const text = doc.getText();
@@ -158,13 +146,21 @@ function tryTypeRepSignatureHelp(
     );
     if (activeParameter === undefined) return undefined;
 
+    const hasImplicits = visibleParams.some((p) => p.implicit);
+    if (hasImplicits) {
+        const explicitParams = visibleParams.filter((p) => !p.implicit);
+        return {
+            signatures: [
+                buildSignatureInfo(funcName, explicitParams, returnType),
+                buildSignatureInfo(funcName, visibleParams, returnType),
+            ],
+            activeSignature: 0,
+            activeParameter,
+        };
+    }
+
     return {
-        signatures: [
-            {
-                label,
-                parameters: paramOffsets.map((p) => ({ label: p })),
-            },
-        ],
+        signatures: [buildSignatureInfo(funcName, visibleParams, returnType)],
         activeSignature: 0,
         activeParameter,
     };
@@ -173,6 +169,26 @@ function tryTypeRepSignatureHelp(
 interface ParamInfo {
     name: string | undefined;
     type: string;
+    implicit: boolean;
+}
+
+function buildSignatureInfo(
+    funcName: string,
+    params: ParamInfo[],
+    returnType: string | undefined,
+): SignatureInformation {
+    const paramStrings = params.map((p) =>
+        p.name ? `${p.name} : ${p.type}` : p.type,
+    );
+    const paramsStr = paramStrings.join(', ');
+    const label = returnType
+        ? `${funcName}(${paramsStr}) -> ${returnType}`
+        : `${funcName}(${paramsStr})`;
+    const paramOffsets = computeParamOffsets(paramStrings, funcName.length + 1);
+    return {
+        label,
+        parameters: paramOffsets.map((p) => ({ label: p })),
+    };
 }
 
 /**
@@ -203,12 +219,29 @@ function extractParamsFromPattern(pat: Node): ParamInfo[] {
 }
 
 function extractSingleParam(pat: Node): ParamInfo {
-    // Unwrap ParP (parenthesized)
     const unwrapped = unwrapParP(pat);
     return {
         name: findParamName(unwrapped),
         type: unwrapped.type ?? '',
+        implicit: isImplicitParam(unwrapped),
     };
+}
+
+function isImplicitParam(pat: Node): boolean {
+    if (pat.name !== 'AnnotP' || !pat.args) return false;
+    const typeAnnot = asNode(pat.args[1]);
+    return typeAnnot ? hasNamedImplicit(typeAnnot) : false;
+}
+
+function hasNamedImplicit(node: Node): boolean {
+    if (node.name === 'NamedT' && node.args) {
+        return node.args[0] === 'implicit';
+    }
+    if (node.name === 'ParT' && node.args) {
+        const inner = asNode(node.args[0]);
+        if (inner) return hasNamedImplicit(inner);
+    }
+    return false;
 }
 
 function unwrapParP(pat: Node): Node {
