@@ -1,4 +1,12 @@
-import { AST, Node } from 'motoko/lib/ast';
+import { AST, Node, Span } from 'motoko/lib/ast';
+import { Position } from 'vscode-languageserver/node';
+
+/**
+ * Converts a 1-based AST {@link Span} to a 0-based LSP {@link Position}.
+ */
+export function spanToPosition(span: Span): Position {
+    return { line: span[0] - 1, character: span[1] };
+}
 
 export function getIdName(
     ast: AST | undefined,

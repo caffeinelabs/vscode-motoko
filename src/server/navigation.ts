@@ -12,6 +12,7 @@ import {
     findInPattern,
     Program,
     Visibility,
+    spanToPosition,
 } from './syntax';
 import { resolveImportUri, importUriFromCompilerUri } from './imports';
 import { LocationSet } from './utils';
@@ -149,10 +150,7 @@ export function rangeFromNode(
                     : node.start[1],
             // character: node.start[1],
         },
-        end: {
-            line: node.end[0] - 1,
-            character: node.end[1],
-        },
+        end: spanToPosition(node.end),
     };
 }
 

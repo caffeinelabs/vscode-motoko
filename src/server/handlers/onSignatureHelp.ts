@@ -11,7 +11,14 @@ import {
 } from 'vscode-languageserver/node';
 
 import { Context, getContext } from '../context';
-import { asNode, findNodes, getIdName, matchCallE, Program } from '../syntax';
+import {
+    asNode,
+    findNodes,
+    getIdName,
+    matchCallE,
+    Program,
+    spanToPosition,
+} from '../syntax';
 import {
     Definition,
     findMostSpecificNodeForPosition,
@@ -129,19 +136,11 @@ function tryTypeRepSignatureHelp(
 
     const returnType = extractReturnType(def.body);
 
-    // Find the opening parenthesis of the call in the source text
-    const text = doc.getText();
+    // Find the active parameter
     if (!funcExpr.end) return undefined;
-    const funcExprEndOffset = doc.offsetAt({
-        line: funcExpr.end[0] - 1,
-        character: funcExpr.end[1],
-    });
-    const parenOffset = text.indexOf('(', funcExprEndOffset);
-    if (parenOffset === -1 || parenOffset >= cursorOffset) return undefined;
-
     const activeParameter = getActiveParamIndex(
-        parenOffset,
-        text,
+        doc.offsetAt(spanToPosition(funcExpr.end)),
+        doc.getText(),
         cursorOffset,
     );
     if (activeParameter === undefined) return undefined;
@@ -447,14 +446,8 @@ function findFuncNodes(
 ): Node[] {
     function posDesc(a: Node, b: Node): number {
         if (!(a.start && b.start)) return 0;
-        const aStartOffset = doc.offsetAt({
-            line: a.start[0] - 1,
-            character: a.start[1],
-        });
-        const bStartOffset = doc.offsetAt({
-            line: b.start[0] - 1,
-            character: b.start[1],
-        });
+        const aStartOffset = doc.offsetAt(spanToPosition(a.start));
+        const bStartOffset = doc.offsetAt(spanToPosition(b.start));
         return bStartOffset - aStartOffset;
     }
     const nodes = findNodes(ast, funcNodesPred(doc, cursorOffset))
@@ -502,10 +495,7 @@ function funcInfo(
 ): { funcName: string; offset: number; funcType: string } {
     return {
         funcName: (node as any).args[0],
-        offset: doc.offsetAt({
-            line: (node as any).end[0] - 1,
-            character: (node as any).end[1],
-        }),
+        offset: doc.offsetAt(spanToPosition((node as any).end)),
         funcType: node.type as string,
     };
 }
