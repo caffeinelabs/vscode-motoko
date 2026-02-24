@@ -15,7 +15,6 @@ import {
     asNode,
     asFuncE,
     findNodes,
-    FuncEMatch,
     getIdName,
     matchCallE,
     Program,
@@ -25,6 +24,7 @@ import {
     findMostSpecificNodeForPosition,
     tryContextDotDefinition,
 } from '../navigation';
+import { findDocComment } from '../hover/docs';
 
 /**
  * Creates a handler for the onSignatureHelp event
@@ -135,8 +135,8 @@ function tryTypeRepSignatureHelp(
     // Skip the first 'self' parameter (contextual dot always has self)
     const visibleParams = extractParamsFromPattern(func.paramPat).slice(1);
 
-    const returnType = extractReturnType(func);
-    const documentation = findDocComment(func.node);
+    const returnType = func.returnTypeAnnot?.type ?? func.body.type;
+    const documentation = findDocComment(def.cursor);
 
     // Find the active parameter
     if (!funcExpr.end) return undefined;
@@ -249,15 +249,6 @@ function hasNamedImplicit(node: Node): boolean {
     return false;
 }
 
-function findDocComment(node: Node): string | undefined {
-    let current: Node | undefined = node;
-    while (current) {
-        if (current.doc) return current.doc;
-        current = current.parent;
-    }
-    return undefined;
-}
-
 function unwrapParP(pat: Node): Node {
     if (pat.name === 'ParP' && pat.args) {
         const inner = asNode(pat.args[0]);
@@ -275,14 +266,6 @@ function findParamName(pat: Node): string | undefined {
         if (inner) return findParamName(inner);
     }
     return undefined;
-}
-
-/**
- * Extracts the return type string from a matched FuncE.
- * Prefers the explicit return type annotation; falls back to the body's inferred type.
- */
-function extractReturnType(func: FuncEMatch): string | undefined {
-    return func.returnTypeAnnot?.type ?? func.body.type;
 }
 
 /**

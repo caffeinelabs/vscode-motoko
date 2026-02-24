@@ -107,6 +107,14 @@ function findLocalDocComment(node: Node): string | null {
 }
 
 /**
+ * Finds and preprocesses the documentation for a given AST node.
+ */
+export function findDocComment(node: Node): string | undefined {
+    const doc = findDocumentationForNode(node);
+    return doc ? preprocessDocComment(doc) : undefined;
+}
+
+/**
  * Finds the most relevant documentation comment for a given AST node and its position.
  * @param uri The document URI.
  * @param position The position within the document.
@@ -128,9 +136,9 @@ export function findDocComments(
     const definitions = findDefinitions(uri, position, true);
 
     for (const definition of definitions) {
-        const doc = findDocumentationForNode(definition.cursor);
+        const doc = findDocComment(definition.cursor);
         if (doc) {
-            docs.push(preprocessDocComment(doc));
+            docs.push(doc);
         }
     }
 
