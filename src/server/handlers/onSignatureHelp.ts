@@ -13,14 +13,15 @@ import {
 import { Context, getContext } from '../context';
 import {
     asNode,
+    asFuncE,
     findNodes,
+    FuncEMatch,
     getIdName,
     matchCallE,
     Program,
     spanToPosition,
 } from '../syntax';
 import {
-    Definition,
     findMostSpecificNodeForPosition,
     tryContextDotDefinition,
 } from '../navigation';
@@ -128,14 +129,14 @@ function tryTypeRepSignatureHelp(
     const funcName = def.name;
     if (!funcName) return undefined;
 
-    const params = extractFuncParams(def);
-    if (!params) return undefined;
+    const func = asFuncE(def.body);
+    if (!func) return undefined;
 
     // Skip the first 'self' parameter (contextual dot always has self)
-    const visibleParams = params.slice(1);
+    const visibleParams = extractParamsFromPattern(func.paramPat).slice(1);
 
-    const returnType = extractReturnType(def.body);
-    const documentation = findDocComment(def.body);
+    const returnType = extractReturnType(func);
+    const documentation = findDocComment(func.node);
 
     // Find the active parameter
     if (!funcExpr.end) return undefined;
@@ -210,21 +211,6 @@ function buildSignatureInfo(
     };
 }
 
-/**
- * Extracts parameter names and types from a function definition's body node.
- * Expects `def.body` to be a FuncE whose param pattern has typed sub-nodes.
- */
-function extractFuncParams(def: Definition): ParamInfo[] | undefined {
-    const body = def.body;
-    if (body.name !== 'FuncE' || !body.args) return undefined;
-
-    // FuncE args: [typeStr, sharedPat, name, ...typBinds, paramPat, retType, sugar, bodyExpr]
-    const paramPatNode = asNode(body.args[body.args.length - 4]);
-    if (!paramPatNode) return undefined;
-
-    return extractParamsFromPattern(paramPatNode);
-}
-
 function extractParamsFromPattern(pat: Node): ParamInfo[] {
     // TupP — multiple parameters
     if (pat.name === 'TupP' && pat.args) {
@@ -292,30 +278,11 @@ function findParamName(pat: Node): string | undefined {
 }
 
 /**
- * Extracts the return type string from a FuncE node.
- *
- * FuncE args layout:
- *   [typeStr, sharedPat, name, ...typBinds, paramPat, returnTypeAnnot, sugarMarker, body]
- *
- * The return type annotation (args[-3]) is either a type node with `.type`
- * (from syntax_typ_js) or the string "_" when no annotation was written.
- * Falls back to the body expression's `.type` when the annotation is absent.
+ * Extracts the return type string from a matched FuncE.
+ * Prefers the explicit return type annotation; falls back to the body's inferred type.
  */
-function extractReturnType(funcE: Node): string | undefined {
-    if (funcE.name !== 'FuncE' || !funcE.args) return undefined;
-
-    const args = funcE.args;
-    const returnTypeAnnot = asNode(args[args.length - 3]);
-    if (returnTypeAnnot?.type) {
-        return returnTypeAnnot.type;
-    }
-
-    const body = asNode(args[args.length - 1]);
-    if (body?.type) {
-        return body.type;
-    }
-
-    return undefined;
+function extractReturnType(func: FuncEMatch): string | undefined {
+    return func.returnTypeAnnot?.type ?? func.body.type;
 }
 
 /**

@@ -407,6 +407,28 @@ export function asDecField(ast: AST | undefined): DecFieldMatch | undefined {
     }));
 }
 
+/**
+ * Mirrors `FuncE` in `astjs.ml`:
+ *   args = [typeStr, sharedPat, name, ...typBinds, paramPat, retTypeAnnot, sugar, body]
+ * The last 4 elements are always fixed; typBinds is variable-length.
+ */
+export interface FuncEMatch extends NodeMatch {
+    paramPat: Node;
+    /** Return type annotation node, or `undefined` when the source had no annotation (serialized as `"_"`). */
+    returnTypeAnnot: Node | undefined;
+    body: Node;
+}
+
+export function asFuncE(ast: AST | undefined): FuncEMatch | undefined {
+    return matchNode(ast, 'FuncE', (...args: AST[]) => {
+        const paramPat = asNode(args[args.length - 4]);
+        const returnTypeAnnot = asNode(args[args.length - 3]);
+        const body = asNode(args[args.length - 1]);
+        if (!paramPat || !body) return undefined;
+        return { node: ast as Node, paramPat, returnTypeAnnot, body };
+    });
+}
+
 // Mirrors `DotE` in `astjs.ml`: args are `[exp, id]`.
 export function asDotE(ast: AST | undefined): DotEMatch | undefined {
     return matchNode(ast, 'DotE', (receiver: Node, id: Node) => ({
