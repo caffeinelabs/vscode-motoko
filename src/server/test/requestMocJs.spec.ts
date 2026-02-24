@@ -53,9 +53,7 @@ describe('request moc.js', () => {
             const textDocuments = new Map<string, TextDocument>();
             const filePath = join(rootPath, 'Main.mo');
             const fileUri = URI.parse(filePath).toString();
-            await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
 
-            // Should receive diagnostics with expected type error from Main.mo
             const diagsPromise = waitForDiagnostics(client, fileUri);
             await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
             const diags = await diagsPromise;
