@@ -360,6 +360,96 @@ export function asCallE(ast: AST | undefined): CallEMatch | undefined {
     });
 }
 
+// --- Pattern matchers ---
+
+/** Some patterns (e.g. WildP) serialize as plain strings, not Node objects. */
+export type PatternElement = Node | 'WildP';
+
+export interface TupPMatch extends NodeMatch {
+    elements: PatternElement[];
+}
+
+// Mirrors `TupP` in `astjs.ml`: args are `[...pats]`.
+export function asTupP(ast: AST | undefined): TupPMatch | undefined {
+    return matchNode(ast, 'TupP', (...elements: PatternElement[]) => ({
+        node: ast as Node,
+        elements,
+    }));
+}
+
+export interface VarPMatch extends NodeMatch {
+    id: Node;
+}
+
+export interface AnnotPMatch extends NodeMatch {
+    pat: Node;
+    typeAnnot: Node;
+}
+
+export interface ParPMatch extends NodeMatch {
+    inner: Node;
+}
+
+// Mirrors `VarP` in `astjs.ml`: args are `[id]`.
+export function asVarP(ast: AST | undefined): VarPMatch | undefined {
+    return matchNode(ast, 'VarP', (id: Node) => ({
+        node: ast as Node,
+        id,
+    }));
+}
+
+// Mirrors `AnnotP` in `astjs.ml`: args are `[pat, type]`.
+export function asAnnotP(ast: AST | undefined): AnnotPMatch | undefined {
+    return matchNode(ast, 'AnnotP', (pat: Node, typeAnnot: Node) => ({
+        node: ast as Node,
+        pat,
+        typeAnnot,
+    }));
+}
+
+// Mirrors `ParP` in `astjs.ml`: args are `[pat]`.
+export function asParP(ast: AST | undefined): ParPMatch | undefined {
+    return matchNode(ast, 'ParP', (inner: Node) => ({
+        node: ast as Node,
+        inner,
+    }));
+}
+
+/** Recursively unwraps `ParP` nodes, returning the innermost non-parenthesized pattern. */
+export function unwrapParP(pat: Node): Node {
+    const p = asParP(pat);
+    return p ? unwrapParP(p.inner) : pat;
+}
+
+// --- Type matchers ---
+
+export interface NamedTMatch extends NodeMatch {
+    label: string;
+    type: Node;
+}
+
+// Mirrors `NamedT` in `astjs.ml`: args are `[name, type]`.
+export function asNamedT(ast: AST | undefined): NamedTMatch | undefined {
+    return matchNode(ast, 'NamedT', (label: string, type: Node) => ({
+        node: ast as Node,
+        label,
+        type,
+    }));
+}
+
+// Mirrors `ParT` in `astjs.ml`: args are `[type]`.
+export function asParT(ast: AST | undefined): Node | undefined {
+    return matchNode(ast, 'ParT', (inner: Node) => inner);
+}
+
+/** Recursively unwraps `ParT` nodes, returning the innermost non-parenthesized type. */
+export function unwrapParT(typ: Node): Node {
+    const inner = asParT(typ);
+    return inner ? unwrapParT(inner) : typ;
+}
+
+// ---------
+
 export function matchDecField<T>(
     ast: AST | undefined,
     fn: (match: DecFieldMatch) => T,

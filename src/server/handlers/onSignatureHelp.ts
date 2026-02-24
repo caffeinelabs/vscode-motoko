@@ -12,13 +12,18 @@ import {
 
 import { Context, getContext } from '../context';
 import {
-    asNode,
+    asAnnotP,
+    asCallE,
     asFuncE,
+    asNamedT,
+    asTupP,
+    asVarP,
     findNodes,
     getIdName,
-    asCallE,
     Program,
     spanToPosition,
+    unwrapParP,
+    unwrapParT,
 } from '../syntax';
 import {
     findMostSpecificNodeForPosition,
@@ -193,60 +198,32 @@ function buildSignature(
 }
 
 function extractParamsFromPattern(pat: Node): ParamInfo[] {
-    // TupP — multiple parameters
-    if (pat.name === 'TupP' && pat.args) {
-        return pat.args
-            .map(asNode)
-            .filter((n): n is Node => !!n)
+    const tup = asTupP(pat);
+    if (tup)
+        return tup.elements
+            .filter((e): e is Node => e !== 'WildP')
             .map(extractSingleParam);
-    }
-    // Single parameter (not wrapped in TupP)
     return [extractSingleParam(pat)];
 }
 
 function extractSingleParam(pat: Node): ParamInfo {
     const unwrapped = unwrapParP(pat);
     return {
-        name: findParamName(unwrapped),
-        type: unwrapped.type ?? '',
+        name: getParamName(unwrapped),
+        type: unwrapped.type ?? '???',
         implicit: isImplicitParam(unwrapped),
     };
 }
 
 function isImplicitParam(pat: Node): boolean {
-    if (pat.name !== 'AnnotP' || !pat.args) return false;
-    const typeAnnot = asNode(pat.args[1]);
-    return typeAnnot ? hasNamedImplicit(typeAnnot) : false;
+    const typeAnnot = asAnnotP(pat)?.typeAnnot;
+    return typeAnnot
+        ? asNamedT(unwrapParT(typeAnnot))?.label === 'implicit'
+        : false;
 }
 
-function hasNamedImplicit(node: Node): boolean {
-    if (node.name === 'NamedT' && node.args) {
-        return node.args[0] === 'implicit';
-    }
-    if (node.name === 'ParT' && node.args) {
-        const inner = asNode(node.args[0]);
-        if (inner) return hasNamedImplicit(inner);
-    }
-    return false;
-}
-
-function unwrapParP(pat: Node): Node {
-    if (pat.name === 'ParP' && pat.args) {
-        const inner = asNode(pat.args[0]);
-        if (inner) return unwrapParP(inner);
-    }
-    return pat;
-}
-
-function findParamName(pat: Node): string | undefined {
-    if (pat.name === 'VarP' && pat.args) {
-        return getIdName(asNode(pat.args[0]));
-    }
-    if (pat.name === 'AnnotP' && pat.args) {
-        const inner = asNode(pat.args[0]);
-        if (inner) return findParamName(inner);
-    }
-    return undefined;
+function getParamName(pat: Node): string | undefined {
+    return getIdName(asVarP(asAnnotP(pat)?.pat ?? pat)?.id);
 }
 
 /**
