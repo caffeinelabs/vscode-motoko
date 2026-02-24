@@ -127,21 +127,10 @@ function tryTypeRepSignatureHelp(
     if (!call) return undefined;
 
     const { funcExpr } = call;
-
     const def = tryContextDotDefinition(ctx, funcExpr, program, documentUri);
-    if (!def) return undefined;
-
-    const funcName = def.name;
-    if (!funcName) return undefined;
-
-    const func = asFuncE(def.body);
-    if (!func) return undefined;
-
-    // Skip the first 'self' parameter (contextual dot always has self)
-    const visibleParams = extractParamsFromPattern(func.paramPat).slice(1);
-
-    const returnType = func.returnTypeAnnot?.type ?? func.body.type;
-    const documentation = findDocComment(def.cursor);
+    const funcName = def?.name;
+    const func = asFuncE(def?.body);
+    if (!def || !func || !funcName) return undefined;
 
     // Find the active parameter
     if (!funcExpr.end) return undefined;
@@ -152,6 +141,12 @@ function tryTypeRepSignatureHelp(
     );
     if (activeParameter === undefined) return undefined;
 
+    // Skip the first 'self' parameter (contextual dot always has self)
+    const visibleParams = extractParamsFromPattern(func.paramPat).slice(1);
+
+    // NB: Signature building with and without implicit parameters could be delegated to the compiler
+    const returnType = func.returnTypeAnnot?.type ?? func.body.type;
+    const documentation = findDocComment(def.cursor);
     const signatures = [];
     if (visibleParams.some((p) => p.implicit)) {
         // Signatures without implicit parameters first
@@ -189,11 +184,10 @@ function buildSignature(
     const label = returnType
         ? `${funcName}(${paramsStr}) -> ${returnType}`
         : `${funcName}(${paramsStr})`;
-    const paramOffsets = computeParamOffsets(paramStrings, funcName.length + 1);
     return {
         label,
         documentation,
-        parameters: paramOffsets.map((p) => ({ label: p })),
+        parameters: paramStrings.map((s) => ({ label: s })),
     };
 }
 
@@ -224,24 +218,6 @@ function isImplicitParam(pat: Node): boolean {
 
 function getParamName(pat: Node): string | undefined {
     return getIdName(asVarP(asAnnotP(pat)?.pat ?? pat)?.id);
-}
-
-/**
- * Computes [start, end] label offsets for each parameter string within the
- * signature label, given the offset where parameters start.
- */
-function computeParamOffsets(
-    paramStrings: string[],
-    startOffset: number,
-): [number, number][] {
-    const offsets: [number, number][] = [];
-    let pos = startOffset;
-    for (let i = 0; i < paramStrings.length; i++) {
-        const len = paramStrings[i].length;
-        offsets.push([pos, pos + len]);
-        pos += len + 2; // ", " separator
-    }
-    return offsets;
 }
 
 /**

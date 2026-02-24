@@ -35,8 +35,7 @@ describe('signatureHelp contextDot', () => {
     function activeParamString(result: SignatureHelp): string {
         const sig = result.signatures[0];
         const param = sig.parameters![result.activeParameter!];
-        const [start, end] = param.label as [number, number];
-        return sig.label.slice(start, end);
+        return param.label as string;
     }
 
     async function appendAndGetSignatureHelp(
