@@ -75,6 +75,9 @@ describe('signatureHelp contextDot', () => {
         const result = await appendAndGetSignatureHelp('obj.f1()', 1);
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe('f1() -> Nat');
+        expect(result!.signatures[0].documentation).toBe(
+            'Returns the data value from the object.',
+        );
         expect(result!.signatures[0].parameters).toEqual([]);
     });
 
@@ -83,6 +86,9 @@ describe('signatureHelp contextDot', () => {
         const result = await appendAndGetSignatureHelp('obj.f2()', 1);
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe('f2(amount : Nat) -> Nat');
+        expect(result!.signatures[0].documentation).toBe(
+            'Adds amount to the data and returns the result.',
+        );
         expect(activeParamString(result!)).toBe('amount : Nat');
     });
 
@@ -92,6 +98,9 @@ describe('signatureHelp contextDot', () => {
         expect(result).not.toBeNull();
         expect(result!.signatures[0].label).toBe(
             'f3(prefix : Text, count : Nat) -> Text',
+        );
+        expect(result!.signatures[0].documentation).toBe(
+            'Combines text with the data, repeated count times.',
         );
         expect(activeParamString(result!)).toBe('prefix : Text');
     });

@@ -135,6 +135,7 @@ function tryTypeRepSignatureHelp(
     const visibleParams = params.slice(1);
 
     const returnType = extractReturnType(def.body);
+    const documentation = findDocComment(def.body);
 
     // Find the active parameter
     if (!funcExpr.end) return undefined;
@@ -150,8 +151,18 @@ function tryTypeRepSignatureHelp(
         const explicitParams = visibleParams.filter((p) => !p.implicit);
         return {
             signatures: [
-                buildSignatureInfo(funcName, explicitParams, returnType),
-                buildSignatureInfo(funcName, visibleParams, returnType),
+                buildSignatureInfo(
+                    funcName,
+                    explicitParams,
+                    returnType,
+                    documentation,
+                ),
+                buildSignatureInfo(
+                    funcName,
+                    visibleParams,
+                    returnType,
+                    documentation,
+                ),
             ],
             activeSignature: 0,
             activeParameter,
@@ -159,7 +170,14 @@ function tryTypeRepSignatureHelp(
     }
 
     return {
-        signatures: [buildSignatureInfo(funcName, visibleParams, returnType)],
+        signatures: [
+            buildSignatureInfo(
+                funcName,
+                visibleParams,
+                returnType,
+                documentation,
+            ),
+        ],
         activeSignature: 0,
         activeParameter,
     };
@@ -175,6 +193,7 @@ function buildSignatureInfo(
     funcName: string,
     params: ParamInfo[],
     returnType: string | undefined,
+    documentation: string | undefined,
 ): SignatureInformation {
     const paramStrings = params.map((p) =>
         p.name ? `${p.name} : ${p.type}` : p.type,
@@ -186,6 +205,7 @@ function buildSignatureInfo(
     const paramOffsets = computeParamOffsets(paramStrings, funcName.length + 1);
     return {
         label,
+        documentation,
         parameters: paramOffsets.map((p) => ({ label: p })),
     };
 }
@@ -241,6 +261,15 @@ function hasNamedImplicit(node: Node): boolean {
         if (inner) return hasNamedImplicit(inner);
     }
     return false;
+}
+
+function findDocComment(node: Node): string | undefined {
+    let current: Node | undefined = node;
+    while (current) {
+        if (current.doc) return current.doc;
+        current = current.parent;
+    }
+    return undefined;
 }
 
 function unwrapParP(pat: Node): Node {
