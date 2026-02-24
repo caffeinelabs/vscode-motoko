@@ -16,7 +16,7 @@ import {
     asFuncE,
     findNodes,
     getIdName,
-    matchCallE,
+    asCallE,
     Program,
     spanToPosition,
 } from '../syntax';
@@ -118,7 +118,7 @@ function tryTypeRepSignatureHelp(
         position,
         (n) => n.name === 'CallE',
     );
-    const call = matchCallE(callNode);
+    const call = asCallE(callNode);
     if (!call) return undefined;
 
     const { funcExpr } = call;
@@ -147,38 +147,19 @@ function tryTypeRepSignatureHelp(
     );
     if (activeParameter === undefined) return undefined;
 
-    const hasImplicits = visibleParams.some((p) => p.implicit);
-    if (hasImplicits) {
+    const signatures = [];
+    if (visibleParams.some((p) => p.implicit)) {
+        // Signatures without implicit parameters first
         const explicitParams = visibleParams.filter((p) => !p.implicit);
-        return {
-            signatures: [
-                buildSignatureInfo(
-                    funcName,
-                    explicitParams,
-                    returnType,
-                    documentation,
-                ),
-                buildSignatureInfo(
-                    funcName,
-                    visibleParams,
-                    returnType,
-                    documentation,
-                ),
-            ],
-            activeSignature: 0,
-            activeParameter,
-        };
+        signatures.push(
+            buildSignature(funcName, explicitParams, returnType, documentation),
+        );
     }
-
+    signatures.push(
+        buildSignature(funcName, visibleParams, returnType, documentation),
+    );
     return {
-        signatures: [
-            buildSignatureInfo(
-                funcName,
-                visibleParams,
-                returnType,
-                documentation,
-            ),
-        ],
+        signatures,
         activeSignature: 0,
         activeParameter,
     };
@@ -190,7 +171,7 @@ interface ParamInfo {
     implicit: boolean;
 }
 
-function buildSignatureInfo(
+function buildSignature(
     funcName: string,
     params: ParamInfo[],
     returnType: string | undefined,

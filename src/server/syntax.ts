@@ -279,96 +279,6 @@ export function matchNode<T>(
 
 // --- Typed AST matchers (shapes documented from `astjs.ml`) ---
 
-export interface CallEMatch {
-    /** The function expression being called (e.g. a DotE for method calls, VarE for plain calls). */
-    funcExpr: Node;
-    /** The argument to the call (last element): TupE for 0 or 2+ args, or the value directly for 1 arg. Always a Node since it comes from `exp_js`. */
-    callArg: Node;
-}
-
-/**
- * Matches a CallE (function call) node.
- *
- * From `astjs.ml`:
- * ```
- * CallE (par_opt, e1, ts, (_, e2)) ->
- *   parenthetical par_opt ([ exp_js e1 ] @ inst ts @ [ exp_js !e2 ])
- * ```
- *
- * Resulting args: `[funcExpr, ...typeInsts, callArg]`
- * - `funcExpr`: the function expression being called (e.g. DotE, VarE)
- * - `typeInsts`: zero or more explicit type instantiation nodes
- * - `callArg`: the argument expression (always the last element)
- */
-export function matchCallE(node: Node | undefined): CallEMatch | undefined {
-    if (!node || node.name !== 'CallE' || !node.args || node.args.length < 2)
-        return undefined;
-    const funcExpr = asNode(node.args[0]);
-    const callArg = asNode(node.args[node.args.length - 1]);
-    if (!funcExpr || !callArg) return undefined;
-    return { funcExpr, callArg };
-}
-
-export interface FuncParam {
-    name: string;
-    /** The type AST. Usually a Node but can be a string for `Any`, `Non`, `Pre`. */
-    type: AST;
-}
-
-export interface FuncTypeMatch {
-    params: FuncParam[];
-    /** Individual return types. Usually Nodes but can be strings for `Any`, `Non`, `Pre`. */
-    returnTypes: AST[];
-}
-
-/**
- * Matches a Func typeRep and extracts structured parameter/return information.
- *
- * From `astjs.ml`:
- * ```
- * Func (s, c, tbs, at, rt) ->
- *   [ func_sort_js s; control_js c ] @ List.map bind_js tbs
- *   @ [ to_js_object "" (List.map typ_js at);
- *       to_js_object "" (List.map typ_js rt) ]
- * ```
- *
- * Resulting args: `[sort, control, ...typBinds, inputs, outputs]`
- * - `sort`: sharing mode string (e.g. "Local", "Shared", "Shared Query")
- * - `control`: return control string (e.g. "Returns", "Promises", "Replies")
- * - `typBinds`: zero or more type parameter bindings (for generic functions)
- * - `inputs` (2nd-to-last): `{ name: '', args: [param, ...] }` where each param
- *   is a Named type `{ name: 'Name', args: [paramName: string, paramType: AST] }`
- * - `outputs` (last): `{ name: '', args: [type, ...] }` containing return type(s)
- */
-export function matchFuncTypeRep(
-    typeRep: Node | undefined,
-): FuncTypeMatch | undefined {
-    if (
-        !typeRep ||
-        typeRep.name !== 'Func' ||
-        !typeRep.args ||
-        typeRep.args.length < 4
-    )
-        return undefined;
-
-    const len = typeRep.args.length;
-    const inputsNode = asNode(typeRep.args[len - 2]);
-    const outputsNode = asNode(typeRep.args[len - 1]);
-
-    const params: FuncParam[] = (inputsNode?.args ?? [])
-        .map(asNode)
-        .filter(
-            (n): n is Node =>
-                !!n && n.name === 'Name' && !!n.args && n.args.length >= 2,
-        )
-        .map((n) => ({ name: String(n.args![0]), type: n.args![1] }));
-
-    return {
-        params,
-        returnTypes: (outputsNode?.args ?? []) as AST[],
-    };
-}
-
 export type Visibility = 'Public' | 'Private' | 'System';
 
 export interface NodeMatch {
@@ -384,6 +294,20 @@ export interface DecFieldMatch extends NodeMatch {
 export interface DotEMatch extends NodeMatch {
     receiver: Node;
     id: Node; // ID node on RHS
+}
+
+export interface FuncEMatch extends NodeMatch {
+    paramPat: Node;
+    /** Return type annotation node, or `undefined` when the source had no annotation (serialized as `"_"`). */
+    returnTypeAnnot: Node | undefined;
+    body: Node;
+}
+
+export interface CallEMatch extends NodeMatch {
+    /** The function expression being called (e.g. a DotE for method calls, VarE for plain calls). */
+    funcExpr: Node;
+    /** The argument to the call (last element): TupE for 0 or 2+ args, or the value directly for 1 arg. Always a Node since it comes from `exp_js`. */
+    callArg: Node;
 }
 
 // Mirrors `vis_js` in `astjs.ml`: either a plain string or an object with `name`.
@@ -407,16 +331,13 @@ export function asDecField(ast: AST | undefined): DecFieldMatch | undefined {
     }));
 }
 
-/**
- * Mirrors `FuncE` in `astjs.ml`:
- *   args = [typeStr, sharedPat, name, ...typBinds, paramPat, retTypeAnnot, sugar, body]
- * The last 4 elements are always fixed; typBinds is variable-length.
- */
-export interface FuncEMatch extends NodeMatch {
-    paramPat: Node;
-    /** Return type annotation node, or `undefined` when the source had no annotation (serialized as `"_"`). */
-    returnTypeAnnot: Node | undefined;
-    body: Node;
+// Mirrors `DotE` in `astjs.ml`: args are `[exp, id]`.
+export function asDotE(ast: AST | undefined): DotEMatch | undefined {
+    return matchNode(ast, 'DotE', (receiver: Node, id: Node) => ({
+        node: ast as Node,
+        receiver,
+        id,
+    }));
 }
 
 export function asFuncE(ast: AST | undefined): FuncEMatch | undefined {
@@ -429,13 +350,14 @@ export function asFuncE(ast: AST | undefined): FuncEMatch | undefined {
     });
 }
 
-// Mirrors `DotE` in `astjs.ml`: args are `[exp, id]`.
-export function asDotE(ast: AST | undefined): DotEMatch | undefined {
-    return matchNode(ast, 'DotE', (receiver: Node, id: Node) => ({
-        node: ast as Node,
-        receiver,
-        id,
-    }));
+// Mirrors `CallE` in `astjs.ml`: args are `[funcExpr, ...typeInst, callArg]`.
+export function asCallE(ast: AST | undefined): CallEMatch | undefined {
+    return matchNode(ast, 'CallE', (...args: AST[]) => {
+        const funcExpr = asNode(args[0]);
+        const callArg = asNode(args[args.length - 1]);
+        if (!funcExpr || !callArg) return undefined;
+        return { node: ast as Node, funcExpr, callArg };
+    });
 }
 
 export function matchDecField<T>(
