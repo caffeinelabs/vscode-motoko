@@ -10,7 +10,7 @@ import { addHandlers } from '../handlers';
 import { forwardMessage } from '../utils';
 
 export class MockDuplex extends Duplex {
-    _write(chunk: Buffer, _encoding: BufferEncoding, callback: Function) {
+    _write(chunk: Buffer, _encoding: BufferEncoding, callback: () => void) {
         this.emit('data', chunk);
         callback();
     }

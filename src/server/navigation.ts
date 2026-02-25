@@ -41,7 +41,7 @@ function spanToPos(span: Span | undefined): Position | undefined {
     return { line: span[0] - 1, character: span[1] };
 }
 
-function posBefore(pos1: Position, pos2: Position): Boolean {
+function posBefore(pos1: Position, pos2: Position): boolean {
     return (
         pos1.line < pos2.line ||
         (pos1.line === pos2.line && pos1.character < pos2.character)

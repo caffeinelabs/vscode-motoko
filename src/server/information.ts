@@ -9,7 +9,7 @@ export function getAstInformation(
     node: Node,
     // source: string,
 ): string | undefined {
-    if (astInformation.hasOwnProperty(node.name)) {
+    if (Object.prototype.hasOwnProperty.call(astInformation, node.name)) {
         return astInformation[node.name];
     }
     // Node with specific source information
