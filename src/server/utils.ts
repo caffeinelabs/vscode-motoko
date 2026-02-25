@@ -239,6 +239,11 @@ export function extractMocVersion(filename: string): string | undefined {
     return;
 }
 
+export interface MocVersionResult {
+    version: string;
+    source: string;
+}
+
 /**
  * Attempts to determine the Motoko compiler (moc) version used in the project.
  *
@@ -249,7 +254,7 @@ export function extractMocVersion(filename: string): string | undefined {
  */
 export function getWorkspaceMocVersion(
     workspaceDir: string,
-): ResultAsync<string, Error> {
+): ResultAsync<MocVersionResult, Error> {
     function getMocVersion(mocPath: string): ResultAsync<string, Error> {
         return ResultAsync.fromThrowable(
             () => execa(mocPath, ['--version']),
@@ -274,15 +279,16 @@ export function getWorkspaceMocVersion(
         )().map((r) => (r as any).stdout.trim());
     }
 
-    function getMopsMocVersion(): ResultAsync<string, Error> {
+    function getMopsMocVersion(): ResultAsync<MocVersionResult, Error> {
+        const mopsPath = join(workspaceDir, 'mops.toml');
         try {
-            const content = readFileSync(
-                join(workspaceDir, 'mops.toml'),
-                'utf8',
-            );
+            const content = readFileSync(mopsPath, 'utf8');
             const config = toml.parse(content) as any;
             return config?.toolchain?.moc
-                ? okAsync(config.toolchain.moc)
+                ? okAsync({
+                      version: config.toolchain.moc,
+                      source: mopsPath,
+                  })
                 : errAsync(
                       Error(
                           'Moc is not specified in mops.toml toolchain section',
@@ -299,7 +305,12 @@ export function getWorkspaceMocVersion(
     }
 
     return getMopsMocVersion().orElse(() =>
-        getDfxCachePath().andThen((path) => getMocVersion(join(path, 'moc'))),
+        getDfxCachePath().andThen((path) =>
+            getMocVersion(join(path, 'moc')).map((version) => ({
+                version,
+                source: 'dfx cache',
+            })),
+        ),
     );
 }
 

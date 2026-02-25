@@ -316,16 +316,20 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                             if (!initializationOptions.useDefaultMocJs) {
                                 const res = await getWorkspaceMocVersion(dir);
                                 if (res.isOk()) {
-                                    overrideMotokoVersion = res.value;
+                                    overrideMotokoVersion = res.value.version;
                                     console.log(
                                         'Detected Motoko version:',
                                         overrideMotokoVersion,
+                                        'from',
+                                        res.value.source,
                                         'in project directory:',
                                         dir,
                                     );
                                 } else {
                                     console.warn(
-                                        'Could not determine Motoko version:',
+                                        'Could not determine Motoko version in project directory',
+                                        dir,
+                                        ':',
                                         res.error.message,
                                     );
                                 }
@@ -383,29 +387,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     }),
                 );
 
-                try {
-                    const extra: string[] = [];
-                    if (settings.extraFlags?.length) {
-                        extra.push(...settings.extraFlags);
-                    }
-                    if (extra.length) {
-                        allContexts().forEach(({ motoko, mocJsInfo }) => {
-                            const version = mocJsInfo.version;
-                            if (
-                                version &&
-                                semver.valid(version) &&
-                                semver.lte(version, '1.1.0')
-                            ) {
-                                console.warn(
-                                    `Motoko version ${version} may not support all extra flags. Invalid or unsupported flags can cause the extension to crash.`,
-                                );
-                            }
-                            motoko.setExtraFlags(extra);
-                        });
-                    }
-                } catch (err) {
-                    console.warn('Failed to apply extra flags:', err);
-                }
+                allContexts().forEach((context) =>
+                    // Future work: read extra flags from mops.toml per context instead of applying globally
+                    context.applyMocFlags(settings.extraFlags),
+                );
 
                 // Add base library autocompletions
                 // TODO: possibly refactor into `context.ts`
