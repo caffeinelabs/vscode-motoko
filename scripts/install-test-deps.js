@@ -12,8 +12,8 @@ const dirs = readdirSync(testDir, { withFileTypes: true })
 function install(dir) {
     return new Promise((resolve, reject) => {
         const p = exec('npx --no ic-mops install', { cwd: dir });
-        p.stdout?.pipe(process.stdout);
-        p.stderr?.pipe(process.stderr);
+        p.stdout?.pipe(process.stdout, { end: false });
+        p.stderr?.pipe(process.stderr, { end: false });
         p.on('error', reject);
         p.on('close', (code) =>
             code ? reject(new Error(`Failed in ${dir}`)) : resolve(),
