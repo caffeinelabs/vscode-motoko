@@ -1511,7 +1511,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         return list;
                     }
                     Array.from(fields.values()).forEach((item) => {
-                        item.detail = getRelativeUri(uri, definition.uri);
+                        item.detail =
+                            context.importResolver.getImportMoURI(
+                                definition.uri,
+                            ) ?? getRelativeUri(uri, definition.uri);
                         list.items.push(item);
                     });
                     return list;
@@ -1542,10 +1545,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         context.importResolver
                             .getFields(uri)
                             .forEach((item) => {
-                                item.detail = getRelativeUri(
-                                    event.textDocument.uri,
-                                    uri,
-                                );
+                                item.detail =
+                                    context.importResolver.getImportMoURI(
+                                        uri,
+                                    ) ??
+                                    getRelativeUri(event.textDocument.uri, uri);
                                 list.items.push(item);
                             });
                     });

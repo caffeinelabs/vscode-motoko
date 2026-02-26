@@ -78,6 +78,8 @@ export default class ImportResolver {
     private readonly _fieldMap = new MultiMap<string, CompletionItem>(Set);
     // import path -> file system uri
     private readonly _fileSystemMap = new Map<string, string>();
+    // file system uri -> import mo: uri
+    private readonly _importUriMoMap = new Map<string, string>();
 
     constructor(private readonly context: Context) {}
 
@@ -93,6 +95,9 @@ export default class ImportResolver {
         const [name, importUri] = info;
         this._moduleNameUriMap.set(name, importUri);
         this._fileSystemMap.set(importUri, uri);
+        if (importUri.startsWith('mo:')) {
+            this._importUriMoMap.set(uri, importUri);
+        }
         this._updateFields(uri, program);
         return true;
     }
@@ -138,7 +143,7 @@ export default class ImportResolver {
         const uris = [];
         for (const [key, value] of this._moduleNameUriMap.entries()) {
             if (key === name) {
-                uris.push(value + '.mo');
+                uris.push(value.startsWith('mo:') ? value : value + '.mo');
             }
         }
         return uris;
@@ -168,7 +173,8 @@ export default class ImportResolver {
      * @returns Array of `[name, field, path]` entries
      */
     getFields(uri: string): CompletionItem[] {
-        const fields = this._fieldMap.get(uri);
+        const fsUri = this.getFileSystemURI(uri) ?? uri;
+        const fields = this._fieldMap.get(fsUri);
         return fields ? [...fields] : [];
     }
 
@@ -178,9 +184,7 @@ export default class ImportResolver {
      * @param label The field label to find
      */
     getField(uri: string, label: string): CompletionItem | undefined {
-        const fsUri = this.getFileSystemURI(uri);
-        if (!fsUri) return undefined;
-        return this.getFields(fsUri).find((f) => f.label === label);
+        return this.getFields(uri).find((f) => f.label === label);
     }
 
     /**
@@ -192,6 +196,14 @@ export default class ImportResolver {
             this._fileSystemMap.get(uri) ||
             this._fileSystemMap.get(`${uri}/lib`)
         );
+    }
+
+    /**
+     * Tries to convert a file system URI back to its `mo:` import URI (e.g. `mo:core/Blob`).
+     * Returns `undefined` if no mapping exists.
+     */
+    getImportMoURI(fileSystemUri: string): string | undefined {
+        return this._importUriMoMap.get(fileSystemUri);
     }
 }
 
