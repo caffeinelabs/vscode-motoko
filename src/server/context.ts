@@ -83,13 +83,12 @@ export class Context {
     applyMocFlags(userFlags: string[] | undefined) {
         const version = this.mocJsInfo.version;
         const validVersion = version && semver.valid(version);
-        const label = `[${this.uri}]`;
 
         // moc < 1.2.0 crashes on invalid flags
-        if (validVersion && semver.lt(version, '1.2.0')) {
+        if (validVersion && semver.lt(validVersion, '1.2.0')) {
             if (userFlags?.length) {
                 console.warn(
-                    `${label} Motoko ${version} does not safely support extra flags (requires >= 1.2.0). Skipping user-defined flags to avoid crashes.`,
+                    `Motoko ${version} does not safely support extra flags (requires >= 1.2.0). Skipping user-defined flags to avoid crashes.`,
                 );
             }
             return;
@@ -100,19 +99,19 @@ export class Context {
             flags.push(...userFlags);
         }
         // Enable --all-libs for bundled moc (unknown version) or moc >= 1.3.0
-        if (!validVersion || semver.gte(version, '1.3.0')) {
+        if (!validVersion || semver.gte(validVersion, '1.3.0')) {
             flags.push('--all-libs');
-            console.log(`${label} --all-libs moc flag: enabled`);
+            console.log(`--all-libs moc flag: enabled`);
         } else {
             console.log(
-                `${label} --all-libs moc flag: disabled (requires >= 1.3.0, got ${validVersion})`,
+                `--all-libs moc flag: disabled (requires >= 1.3.0, got ${validVersion})`,
             );
         }
         if (flags.length) {
             try {
                 this.motoko.setExtraFlags(flags);
             } catch (err) {
-                console.warn(`${label} Failed to apply moc flags:`, err);
+                console.warn(`Failed to apply moc flags:`, err);
             }
         }
     }
