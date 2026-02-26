@@ -85,7 +85,7 @@ export class Context {
         const validVersion = version && semver.valid(version);
         const label = `[${this.uri}]`;
 
-        // moc < 1.2.0 crashes on invalid flags (#5811)
+        // moc < 1.2.0 crashes on invalid flags
         if (validVersion && semver.lt(version, '1.2.0')) {
             if (userFlags?.length) {
                 console.warn(

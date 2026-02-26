@@ -151,28 +151,8 @@ describe('cache', () => {
                 uri: textDocument.uri,
             });
         });
-        // The dependency graph contains two kinds of entries:
-        // - Package paths: the base library is always present because node-motoko
-        //   unconditionally loads it into the virtual filesystem at
-        //   `.node-motoko/base/<version>/`, and the `--all-libs` moc flag causes
-        //   all package modules to appear in the graph as `base/...` paths too.
-        // - Absolute paths: the actual project files from the workspace on disk.
-        // Note: project files like Top.mo also list base package files among
-        // their dependencies, so we strip those out before asserting.
-        const isPackagePath = (p: string) =>
-            p.startsWith('base/') ||
-            p.startsWith('.node-motoko/base/moc-0.15.0/');
-        const packageEntries = actual.filter((ar) => isPackagePath(ar[0]));
-        expect(packageEntries.length).toBeGreaterThan(0);
-        const projectEntries = actual.filter((ar) => !isPackagePath(ar[0]));
         const root = rootUri.fsPath;
-        const projectDeps = projectEntries.map(
-            ([path, deps]: [string, string[]]) => [
-                path,
-                deps.filter((d) => !isPackagePath(d)),
-            ],
-        );
-        expect(projectDeps).toEqual(
+        expect(actual).toEqual(
             expect.arrayContaining([
                 [join(root, 'Top.mo'), [join(root, 'Bottom.mo')]],
                 [join(root, 'Bottom.mo'), []],
