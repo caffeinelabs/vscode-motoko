@@ -75,8 +75,6 @@ export function formatMotoko(source: string): string {
 
 /**
  * Gets the relative path from one URI to another.
- * When schemes differ (e.g. `file:` vs `mo:`), returns `to` as-is,
- * so scheme-based URIs like `mo:core/Array` pass through unchanged.
  */
 export function getRelativeUri(from: string, to: string): string {
     if (from === to) {
