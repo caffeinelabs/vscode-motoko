@@ -250,7 +250,7 @@ export interface MocVersionResult {
  * The function first tries to get the moc version from mops toolchain.
  * If that fails, it falls back to using the moc binary from the dfx cache.
  *
- * @returns {ResultAsync<string, Error>} - The detected moc version or an error.
+ * @returns {ResultAsync<MocVersionResult, Error>} - The detected moc version and source or an error.
  */
 export function getWorkspaceMocVersion(
     workspaceDir: string,
