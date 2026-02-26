@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-const { execSync } = require('child_process');
+const { exec } = require('child_process');
 const { readdirSync, existsSync } = require('fs');
 const { join } = require('path');
 
@@ -9,14 +9,22 @@ const dirs = readdirSync(testDir, { withFileTypes: true })
     .map((d) => join(testDir, d.name))
     .filter((dir) => existsSync(join(dir, 'mops.toml')));
 
-for (const dir of dirs) {
-    console.log(`Installing mops packages in ${dir}`);
-    try {
-        execSync('npx --no ic-mops install', { cwd: dir, stdio: 'inherit' });
-    } catch (err) {
-        console.error(`Failed to install mops packages in ${dir}:`, err.message);
-        process.exit(1);
-    }
+function install(dir) {
+    return new Promise((resolve, reject) => {
+        const p = exec('npx --no ic-mops install', { cwd: dir });
+        p.stdout?.pipe(process.stdout);
+        p.stderr?.pipe(process.stderr);
+        p.on('error', reject);
+        p.on('close', (code) =>
+            code ? reject(new Error(`Failed in ${dir}`)) : resolve(),
+        );
+    });
 }
 
-console.log('All test dependencies installed.');
+Promise.all(dirs.map(install)).then(
+    () => console.log('All test dependencies installed.'),
+    (err) => {
+        console.error(err.message);
+        process.exit(1);
+    },
+);
