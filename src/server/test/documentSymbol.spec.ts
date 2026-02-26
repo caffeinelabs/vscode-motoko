@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 
 jest.setTimeout(60000);
 
-const filePath = `${cwd()}/test/workspaceSymbol`;
+const filePath = `${cwd()}/test/documentSymbol`;
 const rootUri = URI.file(filePath);
 const text = readFileSync(`${filePath}/lib.mo`, 'utf-8');
 
