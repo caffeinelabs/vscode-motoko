@@ -1,6 +1,5 @@
 import { existsSync } from 'fs';
 import { type Motoko } from 'motoko/lib';
-import * as baseLibrary from 'motoko/packages/latest/base.json';
 import { basename, dirname, isAbsolute, join, resolve } from 'path';
 import AstResolver from './ast';
 import ImportResolver from './imports';
@@ -138,23 +137,17 @@ async function requestMotokoInstance(
             motoko,
         );
     }
-    configureMotokoInstance(motoko);
     return [motoko, mocJsInfo];
 }
 
 function configureMotokoCompiler(motoko: Motoko) {
     motoko.compiler.setTypecheckerCombineSrcs?.(true);
     motoko.compiler.setBlobImportPlaceholders?.(true);
-}
-
-// Required for temporary deployment (originally Motoko Playground)
-function configureMotokoInstance(motoko: Motoko) {
     motoko.setPublicMetadata([
         'candid:service',
         'candid:args',
         'motoko:stable-types',
     ]);
-    motoko.loadPackage(baseLibrary);
 }
 
 async function createMotokoInstance(
@@ -272,7 +265,6 @@ function requestDefaultContext() {
         configureMotokoCompiler(motoko);
 
         motokoInstances.set(getMotokoInstanceKey('', undefined), motoko);
-        configureMotokoInstance(motoko);
         defaultContext = new Context('', motoko);
         insertContext(defaultContext);
     }
