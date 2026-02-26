@@ -29,7 +29,7 @@ import {
     findMostSpecificNodeForPosition,
     tryContextDotDefinition,
 } from '../navigation';
-import { findDocComment } from '../hover/docs';
+import { findDocComment, markdownContent } from '../hover/docs';
 
 /**
  * Creates a handler for the onSignatureHelp event
@@ -186,7 +186,7 @@ function buildSignature(
         : `${funcName}(${paramsStr})`;
     return {
         label,
-        documentation,
+        documentation: documentation && markdownContent(documentation),
         parameters: paramStrings.map((s) => ({ label: s })),
     };
 }

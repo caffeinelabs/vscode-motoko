@@ -1,8 +1,13 @@
 import { Node } from 'motoko/lib/ast';
 import { Position } from 'vscode-languageserver-protocol';
+import { MarkupContent, MarkupKind } from 'vscode-languageserver/node';
 import { getPreviousSiblingNode } from './hoverContent';
 import { findDefinitions } from '../navigation';
 import { asNode } from '../syntax';
+
+export function markdownContent(value: string): MarkupContent {
+    return { kind: MarkupKind.Markdown, value };
+}
 
 /**
  * Finds the semantically-relevant documentation for a given AST node.
