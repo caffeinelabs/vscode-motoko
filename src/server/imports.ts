@@ -85,6 +85,8 @@ export default class ImportResolver {
 
     clear() {
         this._moduleNameUriMap.clear();
+        this._fileSystemMap.clear();
+        this._importUriMoMap.clear();
     }
 
     update(uri: string, program: Program | undefined): boolean {
@@ -128,6 +130,8 @@ export default class ImportResolver {
         if (this._fieldMap.delete(uri)) {
             changed = true;
         }
+        this._fileSystemMap.delete(importUri);
+        this._importUriMoMap.delete(uri);
         return changed;
     }
 
