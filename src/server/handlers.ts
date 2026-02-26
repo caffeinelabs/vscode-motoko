@@ -22,7 +22,6 @@ import {
     FileChangeType,
     InitializeResult,
     Location,
-    MarkupKind,
     Position,
     Range,
     SymbolKind,
@@ -100,6 +99,7 @@ import {
     resolveVirtualPath,
 } from './utils';
 import { getAstHoverContent } from './hover/hoverContent';
+import { markdownContent } from './hover/docs';
 import { clearCommentStringCache } from './hover/commentRanges';
 import { formatDocument, FormatterKind } from './formatter';
 import { mkOnSignatureHelpHandler } from './handlers/onSignatureHelp';
@@ -1180,7 +1180,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return results;
     });
 
-    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents));
+    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents, notify));
 
     function findImportUri(
         context: Context,
@@ -1613,10 +1613,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             return;
         }
         return {
-            contents: {
-                kind: MarkupKind.Markdown,
-                value: Array.from(docs.values()).join('\n\n---\n\n'),
-            },
+            contents: markdownContent(
+                Array.from(docs.values()).join('\n\n---\n\n'),
+            ),
             range,
         };
     });
