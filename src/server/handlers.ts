@@ -7,7 +7,6 @@ import { existsSync, readFileSync } from 'fs';
 import { add as mopsAdd } from 'ic-mops/commands/add';
 import { AST, Node, Span } from 'motoko/lib/ast';
 import { keywords } from 'motoko/lib/keywords';
-import * as baseLibrary from 'motoko/packages/latest/base.json';
 import { join, resolve } from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
@@ -406,22 +405,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 } catch (err) {
                     console.warn('Failed to apply extra flags:', err);
                 }
-
-                // Add base library autocompletions
-                // TODO: possibly refactor into `context.ts`
-                Object.entries(baseLibrary.files).forEach(
-                    ([path, { content }]: [string, { content: string }]) => {
-                        writeVirtual(
-                            resolveVirtualPath(`mo:base/${path}`),
-                            content,
-                        );
-                    },
-                );
-                Object.entries(baseLibrary.files).forEach(
-                    ([path, { content }]: [string, { content: string }]) => {
-                        notifyWriteUri(`mo:base/${path}`, content);
-                    },
-                );
 
                 loadingPackages = false;
                 notifyWorkspace(); // Update virtual file system
@@ -1528,7 +1511,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         return list;
                     }
                     Array.from(fields.values()).forEach((item) => {
-                        item.detail = getRelativeUri(uri, definition.uri);
+                        item.detail =
+                            context.importResolver.getImportMoURI(
+                                definition.uri,
+                            ) ?? getRelativeUri(uri, definition.uri);
                         list.items.push(item);
                     });
                     return list;
@@ -1543,7 +1529,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         event.textDocument.uri,
                         preIdent,
                     );
-                    let iter: any;
+                    let iter: string[];
                     if (importUri) {
                         iter = [importUri];
                     } else {
@@ -1559,10 +1545,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         context.importResolver
                             .getFields(uri)
                             .forEach((item) => {
-                                item.detail = getRelativeUri(
-                                    event.textDocument.uri,
-                                    uri,
-                                );
+                                item.detail =
+                                    context.importResolver.getImportMoURI(
+                                        uri,
+                                    ) ??
+                                    getRelativeUri(event.textDocument.uri, uri);
                                 list.items.push(item);
                             });
                     });

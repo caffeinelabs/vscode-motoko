@@ -1,6 +1,6 @@
-import Text "mo:base/Text";
-import Int "mo:base/Int";
-import Blob "mo:base/Blob";
+import Text "mo:core/Text";
+import Int "mo:core/Int";
+import Blob "mo:core/Blob";
 
 import Lib1 "lib1";
 import Lib "lib";
