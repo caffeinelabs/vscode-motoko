@@ -122,7 +122,7 @@ describe('code actions', () => {
                                     },
                                 },
                                 newText:
-                                    'import Blob "mo:base/Blob";\nimport Int "mo:base/Int";\nimport Text "mo:base/Text";\n\nimport Lib "lib";\nimport Lib1 "lib1";\n',
+                                    'import Blob "mo:core/Blob";\nimport Int "mo:core/Int";\nimport Text "mo:core/Text";\n\nimport Lib "lib";\nimport Lib1 "lib1";\n',
                             },
                         ],
                     },
@@ -192,7 +192,7 @@ describe('code actions', () => {
         );
 
         const expected = {
-            title: 'Import "mo:base/Int"',
+            title: 'Import "mo:core/Int"',
             kind: 'quickfix',
             isPreferred: true,
             diagnostics: [
@@ -227,7 +227,7 @@ describe('code actions', () => {
                                     character: 0,
                                 },
                             },
-                            newText: 'import Int "mo:base/Int";\n',
+                            newText: 'import Int "mo:core/Int";\n',
                         },
                     ],
                 },

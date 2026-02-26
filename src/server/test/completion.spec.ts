@@ -15,7 +15,7 @@ jest.setTimeout(60000);
 const initText = `
 import A = "a";
 import B = "b";
-import Blob = "mo:base/Blob";
+import Blob = "mo:core/Blob";
 `;
 
 const workText =
@@ -84,6 +84,16 @@ describe('completion', () => {
         await client.sendNotification('initialized', {});
 
         await serverInitialized;
+
+        // TODO: remove once we set the `--all-libs` by default
+        await client.sendNotification('workspace/didChangeConfiguration', {
+            settings: {
+                motoko: {
+                    extraFlags: ['--ai-errors'],
+                },
+            },
+        });
+        await waitForNotification('custom/initialized', client);
 
         await client.sendNotification('textDocument/didOpen', {
             textDocument: file.textDocument,
@@ -210,7 +220,7 @@ describe('completion', () => {
         expect(completion.items.length).toBeGreaterThanOrEqual(1);
         expect(
             completion.items.every(
-                (item: CompletionItem) => item.detail === 'mo:base/Blob.mo',
+                (item: CompletionItem) => item.detail === 'mo:core/Blob',
             ),
         ).toBe(true);
     });
@@ -238,7 +248,7 @@ describe('completion', () => {
         expect(completion.items.length).toBeGreaterThanOrEqual(1);
         expect(
             completion.items.every(
-                (item: CompletionItem) => item.detail === 'mo:base/Array.mo',
+                (item: CompletionItem) => item.detail === 'mo:core/Array',
             ),
         ).toBe(true);
     });

@@ -7,7 +7,6 @@ import { existsSync, readFileSync } from 'fs';
 import { add as mopsAdd } from 'ic-mops/commands/add';
 import { AST, Node, Span } from 'motoko/lib/ast';
 import { keywords } from 'motoko/lib/keywords';
-import * as baseLibrary from 'motoko/packages/latest/base.json';
 import { join, resolve } from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
@@ -23,7 +22,6 @@ import {
     FileChangeType,
     InitializeResult,
     Location,
-    MarkupKind,
     Position,
     Range,
     SymbolKind,
@@ -101,6 +99,7 @@ import {
     resolveVirtualPath,
 } from './utils';
 import { getAstHoverContent } from './hover/hoverContent';
+import { markdownContent } from './hover/docs';
 import { clearCommentStringCache } from './hover/commentRanges';
 import { formatDocument, FormatterKind } from './formatter';
 import { mkOnSignatureHelpHandler } from './handlers/onSignatureHelp';
@@ -390,22 +389,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 allContexts().forEach((context) =>
                     // Future work: read extra flags from mops.toml per context instead of applying globally
                     context.applyMocFlags(settings.extraFlags),
-                );
-
-                // Add base library autocompletions
-                // TODO: possibly refactor into `context.ts`
-                Object.entries(baseLibrary.files).forEach(
-                    ([path, { content }]: [string, { content: string }]) => {
-                        writeVirtual(
-                            resolveVirtualPath(`mo:base/${path}`),
-                            content,
-                        );
-                    },
-                );
-                Object.entries(baseLibrary.files).forEach(
-                    ([path, { content }]: [string, { content: string }]) => {
-                        notifyWriteUri(`mo:base/${path}`, content);
-                    },
                 );
 
                 loadingPackages = false;
@@ -1182,7 +1165,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return results;
     });
 
-    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents));
+    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents, notify));
 
     function findImportUri(
         context: Context,
@@ -1513,7 +1496,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         return list;
                     }
                     Array.from(fields.values()).forEach((item) => {
-                        item.detail = getRelativeUri(uri, definition.uri);
+                        item.detail =
+                            context.importResolver.getImportMoURI(
+                                definition.uri,
+                            ) ?? getRelativeUri(uri, definition.uri);
                         list.items.push(item);
                     });
                     return list;
@@ -1528,7 +1514,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         event.textDocument.uri,
                         preIdent,
                     );
-                    let iter: any;
+                    let iter: string[];
                     if (importUri) {
                         iter = [importUri];
                     } else {
@@ -1544,10 +1530,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         context.importResolver
                             .getFields(uri)
                             .forEach((item) => {
-                                item.detail = getRelativeUri(
-                                    event.textDocument.uri,
-                                    uri,
-                                );
+                                item.detail =
+                                    context.importResolver.getImportMoURI(
+                                        uri,
+                                    ) ??
+                                    getRelativeUri(event.textDocument.uri, uri);
                                 list.items.push(item);
                             });
                     });
@@ -1611,10 +1598,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             return;
         }
         return {
-            contents: {
-                kind: MarkupKind.Markdown,
-                value: Array.from(docs.values()).join('\n\n---\n\n'),
-            },
+            contents: markdownContent(
+                Array.from(docs.values()).join('\n\n---\n\n'),
+            ),
             range,
         };
     });
