@@ -83,12 +83,6 @@ export default class ImportResolver {
 
     constructor(private readonly context: Context) {}
 
-    clear() {
-        this._moduleNameUriMap.clear();
-        this._fileSystemMap.clear();
-        this._importUriMoMap.clear();
-    }
-
     update(uri: string, program: Program | undefined): boolean {
         const info = getImportInfo(uri, this.context);
         if (!info) {
