@@ -11,7 +11,6 @@ import {
     defaultBeforeAll,
     openTextDocument,
     TextDocument,
-    waitForNotification,
 } from './helpers';
 import { join } from 'node:path';
 
@@ -31,16 +30,6 @@ describe('contextDot completion', () => {
         [client, server] = await defaultBeforeAll(rootUri, true, {
             useDefaultMocJs: true,
         });
-
-        await client.sendNotification('workspace/didChangeConfiguration', {
-            settings: {
-                motoko: {
-                    extraFlags: ['--ai-errors'],
-                },
-            },
-        });
-        await waitForNotification('custom/initialized', client);
-
         textDocument = await openTextDocument(client, rootUri, fileUri);
     });
     afterAll(async () => await defaultAfterAll(client, server));

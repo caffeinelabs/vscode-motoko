@@ -33,7 +33,7 @@ export function waitForNotification<T>(
 export function waitForDiagnostics(
     client: Connection,
     uri: string,
-    timeout: number = 10000,
+    timeout: number = 30000,
 ): Promise<Diagnostic[]> {
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {

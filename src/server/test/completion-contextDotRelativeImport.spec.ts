@@ -47,18 +47,21 @@ describe('contextDot completion with relative import', () => {
 
     test('already imported lib methods do not insert imports', async () => {
         const completion = await requestMainCompletion(4, 6);
-        expect(completion.items.length).toBe(2);
+        expect(completion.items.length).toBe(3);
         const fromLibAItem = completion.items.find(
             (item) => item.label === 'fromLibA',
         );
         const fromLibBItem = completion.items.find(
             (item) => item.label === 'fromLibB',
         );
+        const someItem = completion.items.find((item) => item.label === 'some');
         expect(fromLibAItem).toBeDefined();
         expect(fromLibAItem?.additionalTextEdits).toBeUndefined();
         expect(fromLibAItem?.documentation).toBe('Documentation for fromLibA');
         expect(fromLibBItem).toBeDefined();
         expect(fromLibBItem?.additionalTextEdits).toBeUndefined();
         expect(fromLibBItem?.documentation).toBe('Documentation for fromLibB');
+        expect(someItem).toBeDefined();
+        expect(someItem?.additionalTextEdits?.length).toBeGreaterThan(0);
     });
 });
