@@ -2,7 +2,7 @@
 
 1. Update the bundled Motoko compiler: `npm i motoko@latest`
 2. Update `version` in `package.json`
-3. Commit and push to `main`
+3. Commit and push to `master`
 4. Go to [GitHub Releases](https://github.com/caffeinelabs/vscode-motoko/releases) and draft a new release
 5. Create a new tag matching the version (e.g. `v0.21.0`)
 6. Leave the title blank so it's automatically populated with the version

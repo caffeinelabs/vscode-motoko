@@ -15,7 +15,7 @@ jobs:
     steps:
     - uses: actions/checkout@v3
     - name: Install
-      run: npm install
+      run: npm ci
     - name: Package
       id: package
       run: |
