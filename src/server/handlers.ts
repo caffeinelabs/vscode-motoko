@@ -7,7 +7,6 @@ import { existsSync, readFileSync } from 'fs';
 import { add as mopsAdd } from 'ic-mops/commands/add';
 import { AST, Node, Span } from 'motoko/lib/ast';
 import { keywords } from 'motoko/lib/keywords';
-import * as baseLibrary from 'motoko/packages/latest/base.json';
 import { join, resolve } from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
@@ -23,7 +22,6 @@ import {
     FileChangeType,
     InitializeResult,
     Location,
-    MarkupKind,
     Position,
     Range,
     SymbolKind,
@@ -101,6 +99,7 @@ import {
     resolveVirtualPath,
 } from './utils';
 import { getAstHoverContent } from './hover/hoverContent';
+import { markdownContent } from './hover/docs';
 import { clearCommentStringCache } from './hover/commentRanges';
 import { formatDocument, FormatterKind } from './formatter';
 import { mkOnSignatureHelpHandler } from './handlers/onSignatureHelp';
@@ -316,16 +315,20 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                             if (!initializationOptions.useDefaultMocJs) {
                                 const res = await getWorkspaceMocVersion(dir);
                                 if (res.isOk()) {
-                                    overrideMotokoVersion = res.value;
+                                    overrideMotokoVersion = res.value.version;
                                     console.log(
                                         'Detected Motoko version:',
                                         overrideMotokoVersion,
+                                        'from',
+                                        res.value.source,
                                         'in project directory:',
                                         dir,
                                     );
                                 } else {
                                     console.warn(
-                                        'Could not determine Motoko version:',
+                                        'Could not determine Motoko version in project directory',
+                                        dir,
+                                        ':',
                                         res.error.message,
                                     );
                                 }
@@ -383,44 +386,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     }),
                 );
 
-                try {
-                    const extra: string[] = [];
-                    if (settings.extraFlags?.length) {
-                        extra.push(...settings.extraFlags);
-                    }
-                    if (extra.length) {
-                        allContexts().forEach(({ motoko, mocJsInfo }) => {
-                            const version = mocJsInfo.version;
-                            if (
-                                version &&
-                                semver.valid(version) &&
-                                semver.lte(version, '1.1.0')
-                            ) {
-                                console.warn(
-                                    `Motoko version ${version} may not support all extra flags. Invalid or unsupported flags can cause the extension to crash.`,
-                                );
-                            }
-                            motoko.setExtraFlags(extra);
-                        });
-                    }
-                } catch (err) {
-                    console.warn('Failed to apply extra flags:', err);
-                }
-
-                // Add base library autocompletions
-                // TODO: possibly refactor into `context.ts`
-                Object.entries(baseLibrary.files).forEach(
-                    ([path, { content }]: [string, { content: string }]) => {
-                        writeVirtual(
-                            resolveVirtualPath(`mo:base/${path}`),
-                            content,
-                        );
-                    },
-                );
-                Object.entries(baseLibrary.files).forEach(
-                    ([path, { content }]: [string, { content: string }]) => {
-                        notifyWriteUri(`mo:base/${path}`, content);
-                    },
+                allContexts().forEach((context) =>
+                    // Future work: read extra flags from mops.toml per context instead of applying globally
+                    context.applyMocFlags(settings.extraFlags),
                 );
 
                 loadingPackages = false;
@@ -1197,7 +1165,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return results;
     });
 
-    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents));
+    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents, notify));
 
     function findImportUri(
         context: Context,
@@ -1528,7 +1496,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         return list;
                     }
                     Array.from(fields.values()).forEach((item) => {
-                        item.detail = getRelativeUri(uri, definition.uri);
+                        item.detail =
+                            context.importResolver.getImportMoURI(
+                                definition.uri,
+                            ) ?? getRelativeUri(uri, definition.uri);
                         list.items.push(item);
                     });
                     return list;
@@ -1543,7 +1514,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         event.textDocument.uri,
                         preIdent,
                     );
-                    let iter: any;
+                    let iter: string[];
                     if (importUri) {
                         iter = [importUri];
                     } else {
@@ -1559,10 +1530,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         context.importResolver
                             .getFields(uri)
                             .forEach((item) => {
-                                item.detail = getRelativeUri(
-                                    event.textDocument.uri,
-                                    uri,
-                                );
+                                item.detail =
+                                    context.importResolver.getImportMoURI(
+                                        uri,
+                                    ) ??
+                                    getRelativeUri(event.textDocument.uri, uri);
                                 list.items.push(item);
                             });
                     });
@@ -1626,10 +1598,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             return;
         }
         return {
-            contents: {
-                kind: MarkupKind.Markdown,
-                value: Array.from(docs.values()).join('\n\n---\n\n'),
-            },
+            contents: markdownContent(
+                Array.from(docs.values()).join('\n\n---\n\n'),
+            ),
             range,
         };
     });

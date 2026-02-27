@@ -12,6 +12,7 @@ import {
     findInPattern,
     Program,
     Visibility,
+    spanToPosition,
 } from './syntax';
 import { resolveImportUri, importUriFromCompilerUri } from './imports';
 import { LocationSet } from './utils';
@@ -149,10 +150,7 @@ export function rangeFromNode(
                     : node.start[1],
             // character: node.start[1],
         },
-        end: {
-            line: node.end[0] - 1,
-            character: node.end[1],
-        },
+        end: spanToPosition(node.end),
     };
 }
 
@@ -309,7 +307,7 @@ function resolveModuleImportUri(
  * Try to resolve a context dot method to its module definition.
  * For `obj.method(...)` calls, this finds the function in the source module.
  */
-function tryContextDotDefinition(
+export function tryContextDotDefinition(
     context: Context,
     node: Node,
     program: Program | undefined,
@@ -326,7 +324,7 @@ function tryContextDotDefinition(
     const moduleUri = context.importResolver.getFileSystemURI(moduleImportUri);
     if (!moduleUri) return undefined;
 
-    const moduleStatus = context.astResolver.request(moduleUri, false);
+    const moduleStatus = context.astResolver.requestTyped(moduleUri);
     const exportNode = asNode(moduleStatus?.program?.export?.ast);
     if (!exportNode) return undefined;
 
