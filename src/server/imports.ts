@@ -1,10 +1,16 @@
 import { pascalCase } from 'change-case';
 import { MultiMap } from 'mnemonist';
 import { AST, Node } from 'motoko/lib/ast';
-import { CompletionItemKind, CompletionItem } from 'vscode-languageserver/node';
+import {
+    CompletionItemKind,
+    CompletionItem,
+    Position,
+    TextEdit,
+} from 'vscode-languageserver/node';
 import { Context, getContext } from './context';
-import { Import, Program, getIdName, matchNode } from './syntax';
-import { formatMotoko, getRelativeUri } from './utils';
+import { Import, Program, getIdName, asDecField, matchNode } from './syntax';
+import { URI } from 'vscode-uri';
+import { formatMotoko, getAbsoluteUri, getRelativeUri } from './utils';
 
 export function extractFields(
     ast: AST,
@@ -13,18 +19,12 @@ export function extractFields(
     const fieldMap = new MultiMap<string, CompletionItem>(Set);
     matchNode(ast, 'ObjBlockE', (_s: string, _t: string, ...fields: Node[]) =>
         fields.forEach((field) => {
-            if (field.name !== 'DecField') {
-                console.error(
-                    'Error: expected `DecField`, received',
-                    field.name,
-                );
+            const df = asDecField(field);
+            if (!df || df.visibility !== 'Public') {
                 return;
             }
-            const [dec, visibility] = field.args!;
-            const doc = field.doc;
-            if (visibility !== 'Public') {
-                return;
-            }
+            const { node, dec } = df;
+            const doc = node.doc;
             matchNode(dec, 'LetD', (pat: Node, exp: Node) => {
                 const name = matchNode(pat, 'VarP', (field: Node) => field);
                 if (name) {
@@ -78,12 +78,10 @@ export default class ImportResolver {
     private readonly _fieldMap = new MultiMap<string, CompletionItem>(Set);
     // import path -> file system uri
     private readonly _fileSystemMap = new Map<string, string>();
+    // file system uri -> import mo: uri
+    private readonly _importUriMoMap = new Map<string, string>();
 
     constructor(private readonly context: Context) {}
-
-    clear() {
-        this._moduleNameUriMap.clear();
-    }
 
     update(uri: string, program: Program | undefined): boolean {
         const info = getImportInfo(uri, this.context);
@@ -93,6 +91,9 @@ export default class ImportResolver {
         const [name, importUri] = info;
         this._moduleNameUriMap.set(name, importUri);
         this._fileSystemMap.set(importUri, uri);
+        if (importUri.startsWith('mo:')) {
+            this._importUriMoMap.set(uri, importUri);
+        }
         this._updateFields(uri, program);
         return true;
     }
@@ -123,6 +124,8 @@ export default class ImportResolver {
         if (this._fieldMap.delete(uri)) {
             changed = true;
         }
+        this._fileSystemMap.delete(importUri);
+        this._importUriMoMap.delete(uri);
         return changed;
     }
 
@@ -138,7 +141,7 @@ export default class ImportResolver {
         const uris = [];
         for (const [key, value] of this._moduleNameUriMap.entries()) {
             if (key === name) {
-                uris.push(value + '.mo');
+                uris.push(value.startsWith('mo:') ? value : value + '.mo');
             }
         }
         return uris;
@@ -168,23 +171,41 @@ export default class ImportResolver {
      * @returns Array of `[name, field, path]` entries
      */
     getFields(uri: string): CompletionItem[] {
-        const fields = this._fieldMap.get(uri);
+        const fsUri = this.getFileSystemURI(uri) ?? uri;
+        const fields = this._fieldMap.get(fsUri);
         return fields ? [...fields] : [];
+    }
+
+    /**
+     * Finds a specific importable field by label in a module.
+     * @param uri Absolute file import URI (e.g. `mo:package/File`, `canister:alias`, `file:///Lib`)
+     * @param label The field label to find
+     */
+    getField(uri: string, label: string): CompletionItem | undefined {
+        return this.getFields(uri).find((f) => f.label === label);
     }
 
     /**
      * Converts a resolved import path into the corresponding file system URI.
      * @param uri Absolute file import URI (e.g. `mo:package/File`, `canister:alias`, `file:///Lib`)
      */
-    getFileSystemURI(path: string): string | undefined {
+    getFileSystemURI(uri: string): string | undefined {
         return (
-            this._fileSystemMap.get(path) ||
-            this._fileSystemMap.get(`${path}/lib`)
+            this._fileSystemMap.get(uri) ||
+            this._fileSystemMap.get(`${uri}/lib`)
         );
+    }
+
+    /**
+     * Tries to convert a file system URI back to its `mo:` import URI (e.g. `mo:core/Blob`).
+     * Returns `undefined` if no mapping exists.
+     */
+    getImportMoURI(fileSystemUri: string): string | undefined {
+        return this._importUriMoMap.get(fileSystemUri);
     }
 }
 
-function getImportName(path: string): string {
+export function getImportName(path: string): string {
     return pascalCase(/([^/]+)$/i.exec(path)?.[1] || '');
 }
 
@@ -198,9 +219,9 @@ function getImportInfo(
     uri = uri.slice(0, -'.mo'.length);
     // Resolve package import paths
     for (const regex of [
-        /\.vessel\/([^\/]+)\/[^\/]+\/src\/(.+)/,
-        /\.mops\/([^%\/]+)%40[^\/]+\/src\/(.+)/,
-        /\.mops\/_github\/([^%\/]+)%40[^\/]+\/src\/(.+)/,
+        /\.vessel\/([^/]+)\/[^/]+\/src\/(.+)/,
+        /\.mops\/([^%/]+)%40[^/]+\/src\/(.+)/,
+        /\.mops\/_github\/([^%/]+)%40[^/]+\/src\/(.+)/,
     ]) {
         const match = regex.exec(uri);
         if (match) {
@@ -290,4 +311,124 @@ export function organizeImports(imports: Import[]): string {
         });
 
     return formatMotoko(groupParts.map((p) => p.join('\n')).join('\n\n'));
+}
+
+/**
+ * Finds the position where a new import should be inserted.
+ * @param imports The existing imports in the program
+ * @param importPath The path of the import to add
+ * @returns The position where the new import should be inserted
+ */
+export function findImportInsertPosition(
+    imports: Import[] | undefined,
+    importPath: string,
+): Position {
+    if (!imports?.length) {
+        return Position.create(0, 0);
+    }
+
+    let lastImport = imports[imports.length - 1];
+
+    // add after last import from the same package
+    if (importPath.startsWith('mo:')) {
+        const importsReversed = imports.slice().reverse();
+        const packagePrefix = importPath.split('/')[0];
+
+        const lastSamePackageImport = importsReversed.find((imprt) => {
+            return (
+                imprt.path === packagePrefix ||
+                imprt.path.startsWith(`${packagePrefix}/`)
+            );
+        });
+        if (lastSamePackageImport) {
+            lastImport = lastSamePackageImport;
+        } else {
+            // add after last package import
+            const lastPackageImport = importsReversed.find((imprt) => {
+                return imprt.path.startsWith('mo:');
+            });
+            if (lastPackageImport) {
+                lastImport = lastPackageImport;
+            }
+        }
+    }
+
+    const end = (lastImport.ast as Node)?.end;
+    if (end) {
+        return Position.create(end[0], 0);
+    }
+    return Position.create(0, 0);
+}
+
+/**
+ * Checks if an import with the given name already exists.
+ * Matches against module name or field alias.
+ */
+export function hasImportWithName(
+    imports: Import[] | undefined,
+    name: string,
+): boolean {
+    if (!imports) return false;
+    return imports.some(
+        (i) => i.name === name || i.fields.some(([, alias]) => alias === name),
+    );
+}
+
+function stripMoExtension(path: string): string {
+    return path.endsWith('.mo') ? path.slice(0, -3) : path;
+}
+
+/**
+ * Converts a compiler virtual path (e.g. `/Users/.../libA.mo`)
+ * to a module URI (e.g. `file:///Users/.../libA`).
+ * Scheme-based URIs (e.g. `mo:core/Array`) are returned as-is.
+ */
+export function importUriFromCompilerUri(moduleUri: string): string {
+    if (moduleUri.includes(':')) {
+        return moduleUri;
+    }
+    return URI.file(stripMoExtension(moduleUri)).toString();
+}
+
+/**
+ * Resolves a Motoko import path to a full module URI.
+ * Scheme-based paths (e.g. `mo:core/Array`) are returned as-is.
+ * Relative paths are resolved against the document URI.
+ */
+export function resolveImportUri(
+    documentUri: string,
+    importPath: string,
+): string {
+    if (importPath.includes(':')) {
+        return importPath;
+    }
+    return getAbsoluteUri(documentUri, '..', importPath);
+}
+
+/**
+ * Checks if any existing import references the same module as the given module URI.
+ */
+export function hasImportForModule(
+    imports: Import[] | undefined,
+    documentUri: string,
+    moduleUri: string,
+): boolean {
+    if (!imports) return false;
+    return imports.some(
+        (i) => resolveImportUri(documentUri, i.path) === moduleUri,
+    );
+}
+
+/**
+ * Creates a TextEdit for adding a new import.
+ */
+export function importTextEdit(
+    imports: Import[] | undefined,
+    name: string,
+    path: string,
+): TextEdit {
+    return TextEdit.insert(
+        findImportInsertPosition(imports, path),
+        `import ${name} "${path}";\n`,
+    );
 }

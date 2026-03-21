@@ -1,7 +1,5 @@
 import * as glob from 'fast-glob';
 import * as mops from 'ic-mops/mops';
-import { Package } from 'motoko/lib/package';
-import * as baseLibrary from 'motoko/packages/latest/base.json';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import {
@@ -64,19 +62,6 @@ export function activate(context: ExtensionContext) {
     context.subscriptions.push(
         commands.registerCommand('motoko.importMopsPackage', async () => {
             await importMopsPackage(context);
-        }),
-    );
-    // Virtual base library URIs
-    context.subscriptions.push(
-        workspace.registerTextDocumentContentProvider('mo', {
-            provideTextDocumentContent(uri: Uri) {
-                const prefix = 'base/';
-                if (!uri.path.startsWith(prefix)) {
-                    return;
-                }
-                const path = uri.path.substring(prefix.length);
-                return (baseLibrary as Package).files[path]?.content ?? null;
-            },
         }),
     );
     startServer(context);
@@ -160,7 +145,7 @@ function setupTests(context: ExtensionContext) {
                     continue;
                 }
                 switch (getType(item)) {
-                    case ItemType.File:
+                    case ItemType.File: {
                         const start = Date.now();
                         try {
                             run.started(item);
@@ -189,6 +174,7 @@ function setupTests(context: ExtensionContext) {
                         //     await parseTestsInFileContents(test);
                         // }
                         break;
+                    }
                     // case ItemType.TestCase:
                     //     break;
                 }
@@ -248,7 +234,7 @@ export function startServer(context: ExtensionContext) {
         run: { module, transport: TransportKind.ipc, options: { execArgv } },
         debug: {
             module,
-            options: { execArgv: ['--nolazy', '--inspect=6004', ...execArgv] },
+            options: { execArgv: ['--nolazy', '--inspect=6005', ...execArgv] },
             transport: TransportKind.ipc,
         },
     });

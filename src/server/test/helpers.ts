@@ -1,4 +1,4 @@
-import { Connection } from 'vscode-languageserver/node';
+import { Connection, Diagnostic } from 'vscode-languageserver/node';
 import { InitializeResult } from 'vscode-languageclient/node';
 import { URI } from 'vscode-uri';
 import { clientInitParams, setupClientServer } from './mock';
@@ -26,6 +26,33 @@ export function waitForNotification<T>(
     });
 }
 
+/**
+ * Waits for diagnostics to be published for a specific document URI.
+ * Set up the listener BEFORE triggering document changes.
+ */
+export function waitForDiagnostics(
+    client: Connection,
+    uri: string,
+    timeout: number = 30000,
+): Promise<Diagnostic[]> {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            disposable.dispose();
+            reject(new Error(`Timeout waiting for diagnostics for ${uri}`));
+        }, timeout);
+        const disposable = client.onNotification(
+            'textDocument/publishDiagnostics',
+            (params: { uri: string; diagnostics: Diagnostic[] }) => {
+                if (params.uri === uri) {
+                    clearTimeout(timer);
+                    disposable.dispose();
+                    resolve(params.diagnostics);
+                }
+            },
+        );
+    });
+}
+
 export function makeTextDocument(
     rootUri: URI,
     file: string,
@@ -46,18 +73,22 @@ export async function runTest<T>(
     redirectConsole: boolean = true,
     initializationOptions?: Record<string, unknown>,
 ): Promise<T> {
-    const [client, _server] = setupClientServer(redirectConsole);
-    const serverInitialized = waitForNotification('custom/initialized', client);
-    await client.sendRequest<InitializeResult>(
-        'initialize',
-        clientInitParams(rootUri, initializationOptions),
-    );
-    await client.sendNotification('initialized', {});
-    await serverInitialized;
-    const result = await test(client);
-    await client.sendRequest('shutdown');
-    await wait(1); // wait for shutdown
-    return result;
+    const [client, server] = setupClientServer(redirectConsole);
+    try {
+        const serverInitialized = waitForNotification(
+            'custom/initialized',
+            client,
+        );
+        await client.sendRequest<InitializeResult>(
+            'initialize',
+            clientInitParams(rootUri, initializationOptions),
+        );
+        await client.sendNotification('initialized', {});
+        await serverInitialized;
+        return await test(client);
+    } finally {
+        await defaultAfterAll(client, server);
+    }
 }
 
 // Use if you don't care about having server state between tests.
@@ -84,10 +115,14 @@ export async function defaultBeforeAll(
 
 export async function defaultAfterAll(
     client: Connection,
-    _server: Connection,
+    server: Connection,
 ): Promise<void> {
-    await client.sendRequest('shutdown');
-    await wait(2);
+    try {
+        await client.sendRequest('shutdown');
+    } finally {
+        client.dispose();
+        server.dispose();
+    }
 }
 
 export async function openTextDocuments(
@@ -99,15 +134,28 @@ export async function openTextDocuments(
     await Promise.all(
         uris.map(async (uri) => {
             if (!textDocuments.has(uri)) {
-                const basename = uri.startsWith(rootUri.toString())
-                    ? uri.slice(rootUri.toString().length)
-                    : uri;
-                const textDocument = makeTextDocument(rootUri, basename);
+                const textDocument = await openTextDocument(
+                    client,
+                    rootUri,
+                    uri,
+                );
                 textDocuments.set(uri, textDocument);
-                await client.sendNotification('textDocument/didOpen', {
-                    textDocument,
-                });
             }
         }),
     );
+}
+
+export async function openTextDocument(
+    client: Connection,
+    rootUri: URI,
+    uri: string,
+): Promise<TextDocument> {
+    const basename = uri.startsWith(rootUri.toString())
+        ? uri.slice(rootUri.toString().length)
+        : uri;
+    const textDocument = makeTextDocument(rootUri, basename);
+    await client.sendNotification('textDocument/didOpen', {
+        textDocument,
+    });
+    return textDocument;
 }

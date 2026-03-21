@@ -7,7 +7,6 @@ import { existsSync, readFileSync } from 'fs';
 import { add as mopsAdd } from 'ic-mops/commands/add';
 import { AST, Node, Span } from 'motoko/lib/ast';
 import { keywords } from 'motoko/lib/keywords';
-import * as baseLibrary from 'motoko/packages/latest/base.json';
 import { join, resolve } from 'path';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
@@ -23,7 +22,6 @@ import {
     FileChangeType,
     InitializeResult,
     Location,
-    MarkupKind,
     Position,
     Range,
     SymbolKind,
@@ -59,8 +57,15 @@ import {
     getContext,
     resetContexts,
 } from './context';
+import { addContextualDotCompletions } from './completions';
 import DfxResolver from './dfx';
-import { extractFields, organizeImports } from './imports';
+import {
+    importTextEdit,
+    extractFields,
+    findImportInsertPosition,
+    hasImportWithName,
+    organizeImports,
+} from './imports';
 import {
     startPosDesc,
     Definition,
@@ -75,7 +80,6 @@ import { deployTemporary } from './deployer';
 import {
     Class,
     Field,
-    Import,
     ObjBlock,
     Program,
     SyntaxWithFields,
@@ -95,6 +99,7 @@ import {
     resolveVirtualPath,
 } from './utils';
 import { getAstHoverContent } from './hover/hoverContent';
+import { markdownContent } from './hover/docs';
 import { clearCommentStringCache } from './hover/commentRanges';
 import { formatDocument, FormatterKind } from './formatter';
 import { mkOnSignatureHelpHandler } from './handlers/onSignatureHelp';
@@ -139,7 +144,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             console.log(`Running \`${command}\` in directory: ${directory}`);
             const result = await new Promise<string>((resolve, reject) =>
                 exec(command, { cwd: directory }, (err, stdout) =>
-                    // @ts-ignore
+                    // @ts-expect-error toString accepts encoding
                     err ? reject(err) : resolve(stdout.toString('utf8')),
                 ),
             );
@@ -310,16 +315,20 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                             if (!initializationOptions.useDefaultMocJs) {
                                 const res = await getWorkspaceMocVersion(dir);
                                 if (res.isOk()) {
-                                    overrideMotokoVersion = res.value;
+                                    overrideMotokoVersion = res.value.version;
                                     console.log(
                                         'Detected Motoko version:',
                                         overrideMotokoVersion,
+                                        'from',
+                                        res.value.source,
                                         'in project directory:',
                                         dir,
                                     );
                                 } else {
                                     console.warn(
-                                        'Could not determine Motoko version:',
+                                        'Could not determine Motoko version in project directory',
+                                        dir,
+                                        ':',
                                         res.error.message,
                                     );
                                 }
@@ -377,44 +386,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     }),
                 );
 
-                try {
-                    const extra: string[] = [];
-                    if (settings.extraFlags?.length) {
-                        extra.push(...settings.extraFlags);
-                    }
-                    if (extra.length) {
-                        allContexts().forEach(({ motoko, mocJsInfo }) => {
-                            const version = mocJsInfo.version;
-                            if (
-                                version &&
-                                semver.valid(version) &&
-                                semver.lte(version, '1.1.0')
-                            ) {
-                                console.warn(
-                                    `Motoko version ${version} may not support all extra flags. Invalid or unsupported flags can cause the extension to crash.`,
-                                );
-                            }
-                            motoko.setExtraFlags(extra);
-                        });
-                    }
-                } catch (err) {
-                    console.warn('Failed to apply extra flags:', err);
-                }
-
-                // Add base library autocompletions
-                // TODO: possibly refactor into `context.ts`
-                Object.entries(baseLibrary.files).forEach(
-                    ([path, { content }]: [string, { content: string }]) => {
-                        writeVirtual(
-                            resolveVirtualPath(`mo:base/${path}`),
-                            content,
-                        );
-                    },
-                );
-                Object.entries(baseLibrary.files).forEach(
-                    ([path, { content }]: [string, { content: string }]) => {
-                        notifyWriteUri(`mo:base/${path}`, content);
-                    },
+                allContexts().forEach((context) =>
+                    // Future work: read extra flags from mops.toml per context instead of applying globally
+                    context.applyMocFlags(settings.extraFlags),
                 );
 
                 loadingPackages = false;
@@ -531,7 +505,12 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                             }
                             Object.entries(dfxConfig.canisters).forEach(
                                 ([name, canister]) => {
-                                    if (!aliases.hasOwnProperty(name)) {
+                                    if (
+                                        !Object.prototype.hasOwnProperty.call(
+                                            aliases,
+                                            name,
+                                        )
+                                    ) {
                                         const id = canister.remote?.id?.local;
                                         if (id) {
                                             aliases[name] = id;
@@ -581,7 +560,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         }, 1000);
     }
 
-    // TODO: refactor
     function findNewImportPosition(
         uri: string,
         context: Context,
@@ -591,40 +569,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             uri,
             isVirtualFileSystemReady,
         )?.program?.imports;
-        if (imports?.length) {
-            let lastImport = imports[imports.length - 1];
-
-            // add after last import from the same package
-            if (importPath.startsWith('mo:')) {
-                const importsReversed = imports.slice().reverse();
-                importPath = importPath.split('/')[0];
-
-                const lastSamePackageImport: Import | undefined =
-                    importsReversed.find((imprt) => {
-                        return (
-                            imprt.path === importPath ||
-                            imprt.path.startsWith(`${importPath}/`)
-                        );
-                    });
-                if (lastSamePackageImport) {
-                    lastImport = lastSamePackageImport;
-                } else {
-                    // add after last package import
-                    const lastPackageImport = importsReversed.find((imprt) => {
-                        return imprt.path.startsWith('mo:');
-                    });
-                    if (lastPackageImport) {
-                        lastImport = lastPackageImport;
-                    }
-                }
-            }
-
-            const end = (lastImport.ast as Node)?.end;
-            if (end) {
-                return Position.create(end[0], 0);
-            }
-        }
-        return Position.create(0, 0);
+        return findImportInsertPosition(imports, importPath);
     }
 
     if (redirectConsole) {
@@ -1014,15 +959,17 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 return false;
             }
 
-            const { uri: contextUri, motoko, error } = getContext(resolvedUri);
-            console.log('~', virtualPath, `(${contextUri || 'default'})`);
-            let diagnostics = motoko.check(virtualPath) as Diagnostic[];
-            if (error) {
+            const context = getContext(resolvedUri);
+            console.log('~', virtualPath, `(${context.uri || 'default'})`);
+            let diagnostics = context.astResolver.checkDiagnostics(
+                virtualPath,
+            ) as Diagnostic[];
+            if (context.error) {
                 // Context initialization error
                 // diagnostics.length = 0;
                 diagnostics.push({
                     source: virtualPath,
-                    message: error,
+                    message: context.error,
                     severity: DiagnosticSeverity.Information,
                     range: {
                         start: { line: 0, character: 0 },
@@ -1218,7 +1165,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return results;
     });
 
-    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents));
+    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents, notify));
 
     function findImportUri(
         context: Context,
@@ -1238,61 +1185,42 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return;
     }
 
-    function getOffset(text: string, { line, character }: Position): number {
-        const lines = text.split('\n');
-
-        if (line >= lines.length) {
-            throw new Error('Line number out of range');
-        }
-        if (character > lines[line].length) {
-            throw new Error('Character position out of range');
-        }
-
-        // +character for offset into a line, +line for each newline character
-        let offset = character + line;
-        for (let i = 0; i < line; i++) {
-            offset += lines[i].length;
-        }
-
-        return offset;
-    }
-
-    function getLineAndCharacter(text: string, offset: number): Position {
-        if (offset < 0 || offset > text.length) {
-            throw new Error('Offset out of range');
-        }
-
-        let currentOffset = 0;
-        const lines = text.split('\n');
-        for (let line = 0; line < lines.length; line++) {
-            const lineLength = lines[line].length + 1; // +1 for the newline
-
-            if (currentOffset + lineLength > offset) {
-                const character = offset - currentOffset;
-                return { line, character };
-            }
-
-            currentOffset += lineLength;
-        }
-
-        throw new Error('Offset calculation failed');
-    }
-
     connection.onCompletion((event) => {
         const { position } = event;
         const { uri } = event.textDocument;
 
+        // NOTE: isIncomplete=false means the client will filter the completion list
+        // client-side based on the typed prefix. This avoids recomputing the list
+        // on each keystroke, improving performance. The server returns all possible
+        // completions and lets the client handle prefix filtering.
         const list = CompletionList.create([], false);
         try {
-            const text = getFileText(uri);
             const doc = documents.get(uri);
             if (!doc) return list;
+            // Flush latest document content to virtual FS before parsing,
+            // since onDidChangeContent debounces notify() by 500ms.
+            // This prevents getting outdated AST from the cache.
+            notify(doc);
             const context = getContext(uri);
             const status = context.astResolver.requestTyped(uri);
             const program = status?.program;
-            const offset = getOffset(text, position);
-            const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/
-                .exec(text.substring(0, offset))
+
+            if (program) {
+                addContextualDotCompletions(
+                    list.items,
+                    program,
+                    context,
+                    position,
+                    uri,
+                );
+            }
+
+            const offset = doc.offsetAt(position);
+            const prefix = doc.getText(
+                Range.create(Position.create(0, 0), position),
+            );
+            const [dot, identStart] = /(\s*\.\s*)?([a-zA-Z_]?[a-zA-Z0-9_]*)$/ // TODO: only works for identifiers, not `call().method` or `xs[0].m`
+                .exec(prefix)
                 ?.slice(1) ?? ['', ''];
             if (!dot) {
                 let hadError = false;
@@ -1300,26 +1228,19 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     .getNameEntries()
                     .forEach(([name, importPath]) => {
                         try {
-                            const path = importPath.startsWith('mo:')
-                                ? importPath
-                                : getRelativeUri(uri, importPath);
-                            const existingImport =
-                                status?.program?.imports.find(
-                                    (i) =>
-                                        i.name === name ||
-                                        i.fields.some(
-                                            ([, alias]) => alias === name,
-                                        ),
-                                );
-                            if (existingImport || !status?.program) {
+                            const program = status?.program;
+                            if (
+                                !program ||
+                                hasImportWithName(program.imports, name)
+                            ) {
                                 // Skip alternatives with already imported name
                                 return;
                             }
+                            const path = importPath.startsWith('mo:')
+                                ? importPath
+                                : getRelativeUri(uri, importPath);
                             const edits: TextEdit[] = [
-                                TextEdit.insert(
-                                    findNewImportPosition(uri, context, path),
-                                    `import ${name} "${path}";\n`,
-                                ),
+                                importTextEdit(program.imports, name, path),
                             ];
                             list.items.push({
                                 label: name,
@@ -1409,7 +1330,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     // containing the current cursor position.
                     function relevantBlockNode(
                         cursorPosition: Position,
-                    ): (node: Node, parents: Node[]) => Boolean {
+                    ): (node: Node, parents: Node[]) => boolean {
                         return (node: Node, parents: Node[]) => {
                             // Take function parameters if the cursor is inside of function body
                             if (node.name === 'ParP') {
@@ -1458,7 +1379,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     function relevantIdentNode(
                         node: Node,
                         parents: Node[],
-                    ): Boolean {
+                    ): boolean {
                         const criteria =
                             // Take variable identifiers and function names.
                             // They are enclosed in `VarP` and `VarD` nodes
@@ -1550,14 +1471,14 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 // Check for an identifier before the dot (e.g. `Module.abc`)
                 const end = offset - dot.length - identStart.length;
                 const preMatch = /(\s*\.\s*)?([a-zA-Z_][a-zA-Z0-9_]*)$/.exec(
-                    text.substring(0, end),
+                    prefix.substring(0, end),
                 );
                 if (!preMatch) {
                     return list;
                 }
                 const [_preMatch, _preDot, preIdent] = preMatch;
                 const start = end - preIdent.length;
-                const indentPosition = getLineAndCharacter(text, start);
+                const indentPosition = doc.positionAt(start);
                 const definitions = findDefinitions(uri, indentPosition);
                 function completionsFromDefinition(definition: Definition) {
                     // HACK: Base modules seem to be contained inside an ExpD, so we
@@ -1575,7 +1496,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         return list;
                     }
                     Array.from(fields.values()).forEach((item) => {
-                        item.detail = getRelativeUri(uri, definition.uri);
+                        item.detail =
+                            context.importResolver.getImportMoURI(
+                                definition.uri,
+                            ) ?? getRelativeUri(uri, definition.uri);
                         list.items.push(item);
                     });
                     return list;
@@ -1590,7 +1514,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         event.textDocument.uri,
                         preIdent,
                     );
-                    let iter: any;
+                    let iter: string[];
                     if (importUri) {
                         iter = [importUri];
                     } else {
@@ -1606,10 +1530,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         context.importResolver
                             .getFields(uri)
                             .forEach((item) => {
-                                item.detail = getRelativeUri(
-                                    event.textDocument.uri,
-                                    uri,
-                                );
+                                item.detail =
+                                    context.importResolver.getImportMoURI(
+                                        uri,
+                                    ) ??
+                                    getRelativeUri(event.textDocument.uri, uri);
                                 list.items.push(item);
                             });
                     });
@@ -1641,7 +1566,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 const code = diagnostic.code;
                 if (typeof code === 'string' && !codes.includes(code)) {
                     codes.push(code);
-                    if (errorCodes.hasOwnProperty(code)) {
+                    if (
+                        Object.prototype.hasOwnProperty.call(errorCodes, code)
+                    ) {
                         // Show explanation without Markdown heading
                         docs.add(errorCodes[code].replace(/^# M[0-9]+\s+/, ''));
                     }
@@ -1671,10 +1598,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             return;
         }
         return {
-            contents: {
-                kind: MarkupKind.Markdown,
-                value: Array.from(docs.values()).join('\n\n---\n\n'),
-            },
+            contents: markdownContent(
+                Array.from(docs.values()).join('\n\n---\n\n'),
+            ),
             range,
         };
     });
@@ -1969,6 +1895,21 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             diagnostics: [],
         });
         checkWorkspace();
+    });
+
+    connection.onShutdown(() => {
+        // Prevent new checks from being scheduled
+        disableChecks = true;
+
+        // Clear all pending timeouts to prevent operations on disposed connection
+        clearTimeout(checkTimeout);
+        clearTimeout(checkWorkspaceTimeout);
+        clearTimeout(packageConfigChangeTimeout);
+        clearTimeout(dfxChangeTimeout);
+        clearTimeout(validatingTimeout);
+
+        // Clear the check queue
+        checkQueue.length = 0;
     });
 
     documents.listen(connection);

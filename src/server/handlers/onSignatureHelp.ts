@@ -1,14 +1,35 @@
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { AST, Node } from 'motoko/lib/ast';
 import {
+    Position,
     SignatureHelp,
     SignatureHelpParams,
     CancellationToken,
     TextDocuments,
+    SignatureHelpTriggerKind,
+    SignatureInformation,
 } from 'vscode-languageserver/node';
 
-import { getContext } from '../context';
-import { findNodes } from '../syntax';
+import { Context, getContext } from '../context';
+import {
+    asAnnotP,
+    asCallE,
+    asFuncE,
+    asNamedT,
+    asTupP,
+    asVarP,
+    findNodes,
+    getIdName,
+    Program,
+    spanToPosition,
+    unwrapParP,
+    unwrapParT,
+} from '../syntax';
+import {
+    findMostSpecificNodeForPosition,
+    tryContextDotDefinition,
+} from '../navigation';
+import { findDocComment, markdownContent } from '../hover/docs';
 
 /**
  * Creates a handler for the onSignatureHelp event
@@ -18,6 +39,7 @@ import { findNodes } from '../syntax';
  */
 export function mkOnSignatureHelpHandler(
     documents: TextDocuments<TextDocument>,
+    notify: (uri: string | TextDocument) => void,
 ): (
     params: SignatureHelpParams,
     _token: CancellationToken,
@@ -29,10 +51,27 @@ export function mkOnSignatureHelpHandler(
         const { uri } = textDocument;
         const doc = documents.get(uri);
         if (!doc) return null;
-        const { astResolver } = getContext(uri);
+        const ctx = getContext(uri);
+        const { astResolver } = ctx;
+        if (params.context?.triggerKind !== SignatureHelpTriggerKind.Invoked)
+            notify(uri); // Document has changed, make sure we have up to date AST
         const status = astResolver.requestTyped(uri);
         if (!status || !status.ast) return null;
         const cursorOffset = doc.offsetAt(position);
+
+        // Try the definition-based strategy first (handles contextual dot calls)
+        const typeRepResult = tryTypeRepSignatureHelp(
+            status.ast,
+            position,
+            doc,
+            cursorOffset,
+            ctx,
+            status.program,
+            uri,
+        );
+        if (typeRepResult) return typeRepResult;
+
+        // Fall back to the original text-based strategy
         const funcNodes = findFuncNodes(status.ast, doc, cursorOffset);
         if (!funcNodes.length) return null;
         const text = doc.getText();
@@ -64,6 +103,121 @@ export function mkOnSignatureHelpHandler(
             activeParameter: activeParameter,
         };
     };
+}
+
+/**
+ * Attempts signature help for contextual dot calls by finding the function
+ * definition and extracting parameter info from its pattern nodes.
+ */
+function tryTypeRepSignatureHelp(
+    ast: AST,
+    position: Position,
+    doc: TextDocument,
+    cursorOffset: number,
+    ctx: Context,
+    program: Program | undefined,
+    documentUri: string,
+): SignatureHelp | undefined {
+    const callNode = findMostSpecificNodeForPosition(
+        ast,
+        position,
+        (n) => n.name === 'CallE',
+    );
+    const call = asCallE(callNode);
+    if (!call) return undefined;
+
+    const { funcExpr } = call;
+    const def = tryContextDotDefinition(ctx, funcExpr, program, documentUri);
+    const funcName = def?.name;
+    const func = asFuncE(def?.body);
+    if (!def || !func || !funcName) return undefined;
+
+    // Find the active parameter
+    if (!funcExpr.end) return undefined;
+    const activeParameter = getActiveParamIndex(
+        doc.offsetAt(spanToPosition(funcExpr.end)),
+        doc.getText(),
+        cursorOffset,
+    );
+    if (activeParameter === undefined) return undefined;
+
+    // Skip the first 'self' parameter (contextual dot always has self)
+    const visibleParams = extractParamsFromPattern(func.paramPat).slice(1);
+
+    // NB: Signature building with and without implicit parameters could be delegated to the compiler
+    const returnType = func.returnTypeAnnot?.type ?? func.body.type;
+    const documentation = findDocComment(def.cursor);
+    const signatures = [];
+    if (visibleParams.some((p) => p.implicit)) {
+        // Signatures without implicit parameters first
+        const explicitParams = visibleParams.filter((p) => !p.implicit);
+        signatures.push(
+            buildSignature(funcName, explicitParams, returnType, documentation),
+        );
+    }
+    signatures.push(
+        buildSignature(funcName, visibleParams, returnType, documentation),
+    );
+    return {
+        signatures,
+        activeSignature: 0,
+        activeParameter,
+    };
+}
+
+interface ParamInfo {
+    name: string | undefined;
+    type: string;
+    implicit: boolean;
+}
+
+function buildSignature(
+    funcName: string,
+    params: ParamInfo[],
+    returnType: string | undefined,
+    documentation: string | undefined,
+): SignatureInformation {
+    const paramStrings = params.map((p) =>
+        p.name ? `${p.name} : ${p.type}` : p.type,
+    );
+    const paramsStr = paramStrings.join(', ');
+    const label = returnType
+        ? `${funcName}(${paramsStr}) -> ${returnType}`
+        : `${funcName}(${paramsStr})`;
+    return {
+        label,
+        documentation: documentation && markdownContent(documentation),
+        parameters: paramStrings.map((s) => ({ label: s })),
+    };
+}
+
+function extractParamsFromPattern(pat: Node): ParamInfo[] {
+    const tup = asTupP(pat);
+    if (tup)
+        return tup.elements
+            .filter((e): e is Node => e !== 'WildP')
+            .map(extractSingleParam);
+    return [extractSingleParam(pat)];
+}
+
+function extractSingleParam(pat: Node): ParamInfo {
+    const unwrapped = unwrapParP(pat);
+    return {
+        name: getParamName(unwrapped),
+        type: unwrapped.type ?? '???',
+        implicit: isImplicitParam(unwrapped),
+    };
+}
+
+function isImplicitParam(pat: Node): boolean {
+    const typeAnnot = asAnnotP(pat)?.typeAnnot;
+    return typeAnnot
+        ? asNamedT(unwrapParT(typeAnnot))?.label === 'implicit'
+        : false;
+}
+
+function getParamName(pat: Node): string | undefined {
+    return getIdName(asVarP(asAnnotP(pat)?.pat ?? pat)?.id);
 }
 
 /**
@@ -205,14 +359,8 @@ function findFuncNodes(
 ): Node[] {
     function posDesc(a: Node, b: Node): number {
         if (!(a.start && b.start)) return 0;
-        const aStartOffset = doc.offsetAt({
-            line: a.start[0] - 1,
-            character: a.start[1],
-        });
-        const bStartOffset = doc.offsetAt({
-            line: b.start[0] - 1,
-            character: b.start[1],
-        });
+        const aStartOffset = doc.offsetAt(spanToPosition(a.start));
+        const bStartOffset = doc.offsetAt(spanToPosition(b.start));
         return bStartOffset - aStartOffset;
     }
     const nodes = findNodes(ast, funcNodesPred(doc, cursorOffset))
@@ -260,10 +408,7 @@ function funcInfo(
 ): { funcName: string; offset: number; funcType: string } {
     return {
         funcName: (node as any).args[0],
-        offset: doc.offsetAt({
-            line: (node as any).end[0] - 1,
-            character: (node as any).end[1],
-        }),
+        offset: doc.offsetAt(spanToPosition((node as any).end)),
         funcType: node.type as string,
     };
 }

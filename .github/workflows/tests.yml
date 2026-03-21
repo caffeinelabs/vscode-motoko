@@ -28,4 +28,12 @@ jobs:
         cache: 'npm'
     - run: npm ci
     - run: npm run compile
+    - name: Cache mops packages
+      uses: actions/cache@v4
+      with:
+        key: mops-packages-${{ hashFiles('test/**/mops.toml') }}
+        restore-keys: |
+          mops-packages-
+        path: |
+          ~/.cache/mops
     - run: npm test

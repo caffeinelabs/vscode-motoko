@@ -1,8 +1,14 @@
 import { URI } from 'vscode-uri';
 import { join } from 'node:path';
 import { cwd } from 'node:process';
-import { defaultBeforeAll, defaultAfterAll } from './helpers';
-import { Connection } from 'vscode-languageserver';
+import {
+    TextDocument,
+    defaultBeforeAll,
+    defaultAfterAll,
+    openTextDocuments,
+    waitForDiagnostics,
+} from './helpers';
+import { CompletionList, Connection, Hover } from 'vscode-languageserver';
 import { getContext } from '../context';
 import * as fs from 'fs';
 import { settings } from '../globals';
@@ -41,6 +47,66 @@ describe('request moc.js', () => {
 
         test('Moc.js has been downloaded', () => {
             expect(fs.existsSync(mocPath)).toBe(true);
+        });
+
+        test('Diagnostics work with downloaded moc.js', async () => {
+            const textDocuments = new Map<string, TextDocument>();
+            const filePath = join(rootPath, 'Main.mo');
+            const fileUri = URI.parse(filePath).toString();
+
+            const diagsPromise = waitForDiagnostics(client, fileUri);
+            await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
+            const diags = await diagsPromise;
+
+            expect(diags.length).toBeGreaterThan(0);
+        });
+
+        test('Simple completion works with downloaded moc.js', async () => {
+            const textDocuments = new Map<string, TextDocument>();
+            const filePath = join(rootPath, 'Main.mo');
+            const fileUri = URI.parse(filePath).toString();
+            await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
+
+            const completion = await client.sendRequest<CompletionList>(
+                'textDocument/completion',
+                {
+                    textDocument: { uri: fileUri },
+                    position: { line: 11, character: 20 },
+                    context: { triggerKind: 1 },
+                },
+            );
+
+            expect(completion.items.some((item) => item.label === 'let')).toBe(
+                true,
+            );
+        });
+
+        test('Simple hover works with downloaded moc.js', async () => {
+            const textDocuments = new Map<string, TextDocument>();
+            const filePath = join(rootPath, 'Main.mo');
+            const fileUri = URI.parse(filePath).toString();
+            await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
+
+            const hover = await client.sendRequest<Hover>(
+                'textDocument/hover',
+                {
+                    textDocument: { uri: fileUri },
+                    position: { line: 0, character: 1 },
+                },
+            );
+
+            expect(hover).toBeDefined();
+            expect(hover).not.toBeNull();
+            const contents = hover!.contents as { kind: string; value: string };
+            expect(contents.kind).toBe('markdown');
+            expect(contents.value).toContain('```motoko\nimport\n```');
+        });
+
+        test('Old moc.js uses check() fallback', () => {
+            const context = getContext(rootUri.toString());
+            // Old moc.js doesn't have checkWithScopeCache
+            expect(context.checkWithScopeCache).toBeUndefined();
+            expect(context.motoko.check).toBeDefined();
         });
     });
 

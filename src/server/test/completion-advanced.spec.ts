@@ -19,7 +19,7 @@ import { clientInitParams, setupClientServer } from '../test/mock';
 import { cwd } from 'node:process';
 import { readFileSync } from 'node:fs';
 import { EditorState } from '@codemirror/state';
-import { wait, waitForNotification } from './helpers';
+import { waitForDiagnostics, waitForNotification } from './helpers';
 
 jest.setTimeout(60000);
 
@@ -59,15 +59,14 @@ describe('completion', () => {
 
         await serverInitialized;
 
+        const diagnosticsPromise = waitForDiagnostics(client, file.uri);
         await client.sendNotification('textDocument/didOpen', {
             textDocument: file.textDocument,
         });
-
-        await wait(0.5);
+        await diagnosticsPromise;
     });
     afterAll(async () => {
         await client.sendRequest('shutdown');
-        await wait(2);
         client.dispose();
         server.dispose();
     });
