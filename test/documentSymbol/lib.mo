@@ -1,4 +1,4 @@
-import Int "mo:base/Int";
+import Int "mo:core/Int";
 
 module {
   public func wss_func (x: Int, c: Text): Text {

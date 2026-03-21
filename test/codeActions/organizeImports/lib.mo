@@ -1,4 +1,4 @@
-import Int "mo:base/Int";
+import Int "mo:core/Int";
 
 module {
   public func f (x: Int, c: Text): Text {

@@ -9,6 +9,7 @@ import {
 } from 'vscode-languageserver/node';
 import { Context, getContext } from './context';
 import { Import, Program, getIdName, asDecField, matchNode } from './syntax';
+import { URI } from 'vscode-uri';
 import { formatMotoko, getAbsoluteUri, getRelativeUri } from './utils';
 
 export function extractFields(
@@ -77,12 +78,10 @@ export default class ImportResolver {
     private readonly _fieldMap = new MultiMap<string, CompletionItem>(Set);
     // import path -> file system uri
     private readonly _fileSystemMap = new Map<string, string>();
+    // file system uri -> import mo: uri
+    private readonly _importUriMoMap = new Map<string, string>();
 
     constructor(private readonly context: Context) {}
-
-    clear() {
-        this._moduleNameUriMap.clear();
-    }
 
     update(uri: string, program: Program | undefined): boolean {
         const info = getImportInfo(uri, this.context);
@@ -92,6 +91,9 @@ export default class ImportResolver {
         const [name, importUri] = info;
         this._moduleNameUriMap.set(name, importUri);
         this._fileSystemMap.set(importUri, uri);
+        if (importUri.startsWith('mo:')) {
+            this._importUriMoMap.set(uri, importUri);
+        }
         this._updateFields(uri, program);
         return true;
     }
@@ -122,6 +124,8 @@ export default class ImportResolver {
         if (this._fieldMap.delete(uri)) {
             changed = true;
         }
+        this._fileSystemMap.delete(importUri);
+        this._importUriMoMap.delete(uri);
         return changed;
     }
 
@@ -137,7 +141,7 @@ export default class ImportResolver {
         const uris = [];
         for (const [key, value] of this._moduleNameUriMap.entries()) {
             if (key === name) {
-                uris.push(value + '.mo');
+                uris.push(value.startsWith('mo:') ? value : value + '.mo');
             }
         }
         return uris;
@@ -167,8 +171,18 @@ export default class ImportResolver {
      * @returns Array of `[name, field, path]` entries
      */
     getFields(uri: string): CompletionItem[] {
-        const fields = this._fieldMap.get(uri);
+        const fsUri = this.getFileSystemURI(uri) ?? uri;
+        const fields = this._fieldMap.get(fsUri);
         return fields ? [...fields] : [];
+    }
+
+    /**
+     * Finds a specific importable field by label in a module.
+     * @param uri Absolute file import URI (e.g. `mo:package/File`, `canister:alias`, `file:///Lib`)
+     * @param label The field label to find
+     */
+    getField(uri: string, label: string): CompletionItem | undefined {
+        return this.getFields(uri).find((f) => f.label === label);
     }
 
     /**
@@ -181,9 +195,17 @@ export default class ImportResolver {
             this._fileSystemMap.get(`${uri}/lib`)
         );
     }
+
+    /**
+     * Tries to convert a file system URI back to its `mo:` import URI (e.g. `mo:core/Blob`).
+     * Returns `undefined` if no mapping exists.
+     */
+    getImportMoURI(fileSystemUri: string): string | undefined {
+        return this._importUriMoMap.get(fileSystemUri);
+    }
 }
 
-function getImportName(path: string): string {
+export function getImportName(path: string): string {
     return pascalCase(/([^/]+)$/i.exec(path)?.[1] || '');
 }
 
@@ -197,9 +219,9 @@ function getImportInfo(
     uri = uri.slice(0, -'.mo'.length);
     // Resolve package import paths
     for (const regex of [
-        /\.vessel\/([^\/]+)\/[^\/]+\/src\/(.+)/,
-        /\.mops\/([^%\/]+)%40[^\/]+\/src\/(.+)/,
-        /\.mops\/_github\/([^%\/]+)%40[^\/]+\/src\/(.+)/,
+        /\.vessel\/([^/]+)\/[^/]+\/src\/(.+)/,
+        /\.mops\/([^%/]+)%40[^/]+\/src\/(.+)/,
+        /\.mops\/_github\/([^%/]+)%40[^/]+\/src\/(.+)/,
     ]) {
         const match = regex.exec(uri);
         if (match) {
@@ -352,6 +374,22 @@ export function hasImportWithName(
     );
 }
 
+function stripMoExtension(path: string): string {
+    return path.endsWith('.mo') ? path.slice(0, -3) : path;
+}
+
+/**
+ * Converts a compiler virtual path (e.g. `/Users/.../libA.mo`)
+ * to a module URI (e.g. `file:///Users/.../libA`).
+ * Scheme-based URIs (e.g. `mo:core/Array`) are returned as-is.
+ */
+export function importUriFromCompilerUri(moduleUri: string): string {
+    if (moduleUri.includes(':')) {
+        return moduleUri;
+    }
+    return URI.file(stripMoExtension(moduleUri)).toString();
+}
+
 /**
  * Resolves a Motoko import path to a full module URI.
  * Scheme-based paths (e.g. `mo:core/Array`) are returned as-is.
@@ -365,6 +403,20 @@ export function resolveImportUri(
         return importPath;
     }
     return getAbsoluteUri(documentUri, '..', importPath);
+}
+
+/**
+ * Checks if any existing import references the same module as the given module URI.
+ */
+export function hasImportForModule(
+    imports: Import[] | undefined,
+    documentUri: string,
+    moduleUri: string,
+): boolean {
+    if (!imports) return false;
+    return imports.some(
+        (i) => resolveImportUri(documentUri, i.path) === moduleUri,
+    );
 }
 
 /**

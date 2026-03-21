@@ -1,0 +1,16 @@
+{
+    "folders": [
+        {
+            "name": "vscode-motoko",
+            "path": "."
+        },
+        {
+            "name": "node-motoko",
+            "path": "../node-motoko"
+        },
+        {
+            "name": "motoko",
+            "path": "../motoko"
+        }
+    ]
+}
