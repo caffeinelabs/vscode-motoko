@@ -85,16 +85,6 @@ describe('completion', () => {
 
         await serverInitialized;
 
-        // TODO: remove once we set the `--all-libs` by default
-        await client.sendNotification('workspace/didChangeConfiguration', {
-            settings: {
-                motoko: {
-                    extraFlags: ['--ai-errors'],
-                },
-            },
-        });
-        await waitForNotification('custom/initialized', client);
-
         await client.sendNotification('textDocument/didOpen', {
             textDocument: file.textDocument,
         });
