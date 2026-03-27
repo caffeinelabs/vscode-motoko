@@ -1,6 +1,3 @@
-# Opens a PR bumping `motoko` + extension version. Triggered by node-motoko after npm publish (`motoko-release`) or manually.
-# Needs: vars.GENERIC_CI_RW_APP_ID, secrets.GENERIC_CI_RW_APP_PRIVATE_KEY (PRs must use an app token so CI runs).
-
 name: Update motoko npm dependency
 
 on:
@@ -29,7 +26,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - run: npm ci
