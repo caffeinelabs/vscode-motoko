@@ -1,0 +1,100 @@
+name: Update motoko npm dependency
+
+on:
+  repository_dispatch:
+    types: [motoko-release]
+  workflow_dispatch:
+    inputs:
+      version_bump:
+        description: Extension version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+
+concurrency:
+  group: update-motoko
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  update-motoko:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Bump motoko and extension version
+        id: meta
+        env:
+          VERSION_BUMP: ${{ github.event_name == 'workflow_dispatch' && inputs.version_bump || 'patch' }}
+          # Set by node-motoko release workflow (npm version, usually same as tag without "v")
+          DISPATCH_VER: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.version || '' }}
+        run: |
+          set -euo pipefail
+          current=$(jq -r '.packages["node_modules/motoko"].version' package-lock.json)
+          if [ -n "$DISPATCH_VER" ]; then
+            target="${DISPATCH_VER#v}"
+          else
+            target=$(npm view motoko version)
+          fi
+          {
+            echo "current=$current"
+            echo "motoko_version=$target"
+            echo "version_bump=$VERSION_BUMP"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$current" = "$target" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Already on motoko@$target; skipping."
+            exit 0
+          fi
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          npm pkg set "dependencies.motoko=^${target}"
+          npm install
+          npm version "$VERSION_BUMP" --no-git-tag-version
+
+      - name: Cache mops packages
+        if: steps.meta.outputs.skip != 'true'
+        uses: actions/cache@v4
+        with:
+          key: mops-packages-${{ hashFiles('test/**/mops.toml') }}
+          restore-keys: |
+            mops-packages-
+          path: |
+            ~/.cache/mops
+
+      - name: Compile and test
+        if: steps.meta.outputs.skip != 'true'
+        run: |
+          npm run compile
+          npm test
+
+      - name: Generate GitHub App token
+        if: steps.meta.outputs.skip != 'true'
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.GENERIC_CI_RW_APP_ID }}
+          private-key: ${{ secrets.GENERIC_CI_RW_APP_PRIVATE_KEY }}
+
+      - name: Create Pull Request
+        if: steps.meta.outputs.skip != 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          base: master
+          branch: auto/motoko-${{ steps.meta.outputs.motoko_version }}
+          title: 'Bump motoko npm to ${{ steps.meta.outputs.motoko_version }}'
+          body: |
+            Updates bundled [`motoko`](https://www.npmjs.com/package/motoko) from `${{ steps.meta.outputs.current }}` to `${{ steps.meta.outputs.motoko_version }}`.
+
+            Trigger: `${{ github.event_name }}`
+          commit-message: 'Bump motoko to ${{ steps.meta.outputs.motoko_version }}'
+          delete-branch: true
