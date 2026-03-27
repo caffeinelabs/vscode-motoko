@@ -96,5 +96,5 @@ jobs:
             Updates bundled [`motoko`](https://www.npmjs.com/package/motoko) from `${{ steps.meta.outputs.current }}` to `${{ steps.meta.outputs.motoko_version }}`.
 
             Trigger: `${{ github.event_name }}`
-          commit-message: 'Bump motoko to ${{ steps.meta.outputs.motoko_version }}'
+          commit-message: 'Update `motoko` dependency to ${{ steps.meta.outputs.motoko_version }}'
           delete-branch: true
