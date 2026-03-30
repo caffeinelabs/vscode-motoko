@@ -37,6 +37,7 @@ export class Context {
 
     public packages: [string, string][] | undefined;
     public error: string | undefined;
+    public mopsArgs: string[] = [];
 
     // Optional compiler functions for backwards compatibility with older moc.js versions
     public readonly checkWithScopeCache:
@@ -89,7 +90,7 @@ export class Context {
 
         // moc < 1.2.0 crashes on invalid flags
         if (validVersion && semver.lt(validVersion, '1.2.0')) {
-            if (userFlags?.length) {
+            if (this.mopsArgs.length || userFlags?.length) {
                 console.warn(
                     `Motoko ${version} does not safely support extra flags (requires >= 1.2.0). Skipping user-defined flags to avoid crashes.`,
                 );
@@ -97,14 +98,13 @@ export class Context {
             return;
         }
 
-        const flags: string[] = [];
+        const flags: string[] = [...this.mopsArgs];
         if (userFlags?.length) {
             flags.push(...userFlags);
         }
-        // Enable --all-libs for bundled moc (unknown version) or moc >= 1.3.0
         if (
             this.mocJsInfo.source === 'bundled' ||
-            (validVersion && semver.gte(validVersion, '1.3.0'))
+            (validVersion && semver.gte(validVersion, '1.3.0-0'))
         ) {
             flags.push('--all-libs');
             console.log(`--all-libs moc flag: enabled`);
@@ -113,12 +113,26 @@ export class Context {
                 `--all-libs moc flag: disabled (requires >= 1.3.0, got ${version})`,
             );
         }
-        if (flags.length) {
-            try {
-                this.motoko.setExtraFlags(flags);
-            } catch (err) {
-                console.warn(`Failed to apply moc flags:`, err);
+        if (!flags.length) {
+            return;
+        }
+        try {
+            this.motoko.setExtraFlags(flags);
+        } catch {
+            const supported: string[] = [];
+            const unsupported: string[] = [];
+            for (const flag of flags) {
+                try {
+                    this.motoko.setExtraFlags([flag]);
+                    supported.push(flag);
+                } catch {
+                    unsupported.push(flag);
+                }
             }
+            if (unsupported.length) {
+                console.warn('Skipping moc.js-unsupported flags:', unsupported);
+            }
+            this.motoko.setExtraFlags(supported);
         }
     }
 }
