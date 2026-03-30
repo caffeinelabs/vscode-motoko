@@ -92,6 +92,7 @@ import {
     forwardMessage,
     getFileText,
     getWorkspaceMocVersion,
+    getMopsMocArgs,
     getRelativeUri,
     isExternalUri,
     rangeContainsPosition,
@@ -341,6 +342,14 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                 dir,
                             );
 
+                            context.mopsArgs = getMopsMocArgs(dir);
+                            if (context.mopsArgs.length) {
+                                console.log(
+                                    'Moc args from mops.toml:',
+                                    context.mopsArgs,
+                                );
+                            }
+
                             try {
                                 context.packages = await getPackageSources(dir);
                                 context.packages.forEach(
@@ -387,7 +396,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 );
 
                 allContexts().forEach((context) =>
-                    // Future work: read extra flags from mops.toml per context instead of applying globally
                     context.applyMocFlags(settings.extraFlags),
                 );
 

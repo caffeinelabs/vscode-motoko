@@ -315,6 +315,25 @@ export function getWorkspaceMocVersion(
 }
 
 /**
+ * Reads `[moc].args` from `mops.toml` in the given directory.
+ * Returns an empty array if the file doesn't exist, can't be parsed,
+ * or doesn't contain a `[moc]` section with `args`.
+ */
+export function getMopsMocArgs(workspaceDir: string): string[] {
+    const mopsPath = join(workspaceDir, 'mops.toml');
+    try {
+        const content = readFileSync(mopsPath, 'utf8');
+        const config = toml.parse(content) as any;
+        const args = config?.moc?.args;
+        return Array.isArray(args)
+            ? args.filter((a: unknown) => typeof a === 'string')
+            : [];
+    } catch {
+        return [];
+    }
+}
+
+/**
  * Returns path to relevant moc.js downloading required version from the Motoko
  * GitHub releases if needed.
  *
