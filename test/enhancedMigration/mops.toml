@@ -1,0 +1,4 @@
+[dependencies]
+
+[moc]
+args = ["--enhanced-migration=migrations"]
