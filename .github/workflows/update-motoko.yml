@@ -56,8 +56,7 @@ jobs:
             exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
-          npm pkg set "dependencies.motoko=^${target}"
-          npm install
+          npm install "motoko@^${target}" --min-release-age=0  # bypass .npmrc quarantine for fresh releases
           npm version "$VERSION_BUMP" --no-git-tag-version
 
       - name: Cache mops packages
