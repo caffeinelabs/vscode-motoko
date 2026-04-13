@@ -22,9 +22,9 @@ jobs:
   update-motoko:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: 'npm'
@@ -56,13 +56,12 @@ jobs:
             exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
-          npm pkg set "dependencies.motoko=^${target}"
-          npm install
+          npm install "motoko@^${target}" --min-release-age=0  # bypass .npmrc quarantine for fresh releases
           npm version "$VERSION_BUMP" --no-git-tag-version
 
       - name: Cache mops packages
         if: steps.meta.outputs.skip != 'true'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           key: mops-packages-${{ hashFiles('test/**/mops.toml') }}
           restore-keys: |
@@ -79,14 +78,14 @@ jobs:
       - name: Generate GitHub App token
         if: steps.meta.outputs.skip != 'true'
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547 # v1.12.0
         with:
           app-id: ${{ vars.GENERIC_CI_RW_APP_ID }}
           private-key: ${{ secrets.GENERIC_CI_RW_APP_PRIVATE_KEY }}
 
       - name: Create Pull Request
         if: steps.meta.outputs.skip != 'true'
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
         with:
           token: ${{ steps.app-token.outputs.token }}
           base: master
