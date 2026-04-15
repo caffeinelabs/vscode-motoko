@@ -311,6 +311,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     console.log('Registered pending project directory:', dir);
                 });
 
+                // Apply flags to the default context (used for files not under any project)
                 allContexts().forEach((context) =>
                     context.applyMocFlags(settings.extraFlags),
                 );
@@ -774,7 +775,8 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     }
                 } else if (
                     change.uri.endsWith('.dhall') ||
-                    change.uri.endsWith('/mops.toml')
+                    change.uri.endsWith('/mops.toml') ||
+                    change.uri.endsWith('/mops.lock')
                 ) {
                     notifyPackageConfigChange();
                 }
