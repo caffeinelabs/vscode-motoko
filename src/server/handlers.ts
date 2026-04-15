@@ -56,6 +56,11 @@ import {
     allContexts,
     getContext,
     resetContexts,
+    registerPendingDirectory,
+    findPendingDirectoryForUri,
+    removePendingDirectory,
+    getLoadingPromise,
+    setLoadingPromise,
 } from './context';
 import { addContextualDotCompletions } from './completions';
 import DfxResolver from './dfx';
@@ -96,6 +101,8 @@ import {
     getRelativeUri,
     isExternalUri,
     rangeContainsPosition,
+    readSourcesCache,
+    writeSourcesCache,
     resolveFilePath,
     resolveVirtualPath,
 } from './utils';
@@ -200,43 +207,31 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         if (!sources.length) {
             // Prioritize MOPS over Vessel
             if (existsSync(join(directory, 'mops.toml'))) {
-                // let command = 'mops sources';
-                let command = 'npx --no ic-mops sources';
-                try {
-                    const mopsVersion = execSync(
-                        'npx --no ic-mops -- --version',
-                    )
-                        .toString()
-                        .split(/\s/)[1];
-                    if (semver.gte(mopsVersion, '0.45.3')) {
-                        command += ' --no-install';
+                const diskCache = readSourcesCache(directory);
+                if (diskCache) {
+                    console.log('Using cached mops sources for:', directory);
+                    sources = diskCache;
+                } else {
+                    // let command = 'mops sources';
+                    let command = 'npx --no ic-mops sources';
+                    try {
+                        const mopsVersion = execSync(
+                            'npx --no ic-mops -- --version',
+                        )
+                            .toString()
+                            .split(/\s/)[1];
+                        if (semver.gte(mopsVersion, '0.45.3')) {
+                            command += ' --no-install';
+                        }
+                        sources = await sourcesFromCommand(command);
+                        writeSourcesCache(directory, sources);
+                    } catch (err: any) {
+                        throw new Error(
+                            `Error while finding Mops packages.\nMake sure the latest version of Mops is installed locally or globally (https://docs.mops.one/quick-start).\n${
+                                err?.message || err
+                            }`,
+                        );
                     }
-                    sources = await sourcesFromCommand(command);
-                } catch (err: any) {
-                    // try {
-                    //     const sources = await mopsSources(directory);
-                    //     if (!sources) {
-                    //         throw new Error('Unexpected output');
-                    //     }
-                    //     return Object.entries(sources);
-                    // } catch (fallbackError) {
-                    //     console.error(
-                    //         `Error in fallback Mops implementation:`,
-                    //         fallbackError,
-                    //     );
-                    //     // Provide a verbose error message for Mops command
-                    //     throw new Error(
-                    //         `Error while running \`${command}\`: ${
-                    //             err?.message || err
-                    //         }`,
-                    //     );
-                    // }
-
-                    throw new Error(
-                        `Error while finding Mops packages.\nMake sure the latest version of Mops is installed locally or globally (https://docs.mops.one/quick-start).\n${
-                            err?.message || err
-                        }`,
-                    );
                 }
             } else if (existsSync(join(directory, 'vessel.dhall'))) {
                 const command = 'vessel sources';
@@ -258,15 +253,18 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
     }
 
     let isVirtualFileSystemReady = false;
-    let loadingPackages = false;
     let packageConfigChangeTimeout: ReturnType<typeof setTimeout>;
+
+    /**
+     * Discover project directories and register them as pending.
+     * Actual context creation is deferred until a file in the project is opened.
+     */
     function notifyPackageConfigChange(reuseCached = false) {
         isVirtualFileSystemReady = false;
         isWorkspaceReady = false;
         if (!reuseCached) {
             packageSourceCache.clear();
         }
-        loadingPackages = true;
         clearTimeout(packageConfigChangeTimeout);
         packageConfigChangeTimeout = setTimeout(async () => {
             try {
@@ -307,113 +305,181 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                     );
                 }
 
-                await Promise.all(
-                    directories.map(async (dir) => {
-                        try {
-                            console.log('Loading packages for directory:', dir);
-
-                            let overrideMotokoVersion: string | undefined;
-                            if (!initializationOptions.useDefaultMocJs) {
-                                const res = await getWorkspaceMocVersion(dir);
-                                if (res.isOk()) {
-                                    overrideMotokoVersion = res.value.version;
-                                    console.log(
-                                        'Detected Motoko version:',
-                                        overrideMotokoVersion,
-                                        'from',
-                                        res.value.source,
-                                        'in project directory:',
-                                        dir,
-                                    );
-                                } else {
-                                    console.warn(
-                                        'Could not determine Motoko version in project directory',
-                                        dir,
-                                        ':',
-                                        res.error.message,
-                                    );
-                                }
-                            }
-
-                            const uri = URI.file(dir).toString();
-                            const context = await addContext(
-                                uri,
-                                overrideMotokoVersion,
-                                dir,
-                            );
-
-                            context.mopsArgs = getMopsMocArgs(dir);
-                            if (context.mopsArgs.length) {
-                                console.log(
-                                    'Moc args from mops.toml:',
-                                    context.mopsArgs,
-                                );
-                            }
-
-                            try {
-                                context.packages = await getPackageSources(dir);
-                                context.packages.forEach(
-                                    ([name, relativePath]) => {
-                                        const path = resolveVirtualPath(
-                                            uri,
-                                            relativePath,
-                                        );
-                                        console.log(
-                                            'Package:',
-                                            name,
-                                            '->',
-                                            path,
-                                            `(${uri})`,
-                                        );
-                                        context.motoko.usePackage(name, path);
-                                    },
-                                );
-                            } catch (err) {
-                                const detail = String(err).replace(
-                                    /^Error: /,
-                                    '',
-                                );
-                                showErrorMessage(
-                                    'Error while resolving Motoko packages:',
-                                    detail,
-                                );
-                                context.error = String(err);
-                                console.warn(err);
-                                return;
-                            }
-                        } catch (err: any) {
-                            const detail = String(err).replace(/^Error: /, '');
-                            showErrorMessage(
-                                'Error while loading Motoko packages:',
-                                detail,
-                            );
-                            console.error(
-                                `Error while reading packages for directory (${dir}): ${err}`,
-                            );
-                            return;
-                        }
-                    }),
-                );
+                directories.forEach((dir) => {
+                    const uri = URI.file(dir).toString();
+                    registerPendingDirectory(uri, dir);
+                    console.log('Registered pending project directory:', dir);
+                });
 
                 allContexts().forEach((context) =>
                     context.applyMocFlags(settings.extraFlags),
                 );
 
-                loadingPackages = false;
-                notifyWorkspace(); // Update virtual file system
-                notifyDfxChange(); // Reload dfx.json
-                // NOTE: Useful for tests and benchmarks.
-                // Unknown notifications are ignored by the vscode lsp client.
+                notifyWorkspace();
+                notifyDfxChange();
                 connection.sendNotification(TEST_SERVER_INITIALIZED, {});
                 isVirtualFileSystemReady = true;
             } catch (err: any) {
                 isVirtualFileSystemReady = false;
-                loadingPackages = false;
                 console.error(
-                    `Error while loading packages: ${err?.message || err}`,
+                    `Error while discovering projects: ${err?.message || err}`,
                 );
             }
         }, 1000);
+    }
+
+    /**
+     * Load the compiler context for a single project directory.
+     * Creates the moc.js instance, resolves packages, and populates the virtual FS.
+     */
+    async function loadProjectContext(dir: string): Promise<Context> {
+        console.log('Loading packages for directory:', dir);
+
+        let overrideMotokoVersion: string | undefined;
+        if (!initializationOptions.useDefaultMocJs) {
+            const res = await getWorkspaceMocVersion(dir);
+            if (res.isOk()) {
+                overrideMotokoVersion = res.value.version;
+                console.log(
+                    'Detected Motoko version:',
+                    overrideMotokoVersion,
+                    'from',
+                    res.value.source,
+                    'in project directory:',
+                    dir,
+                );
+            } else {
+                console.warn(
+                    'Could not determine Motoko version in project directory',
+                    dir,
+                    ':',
+                    res.error.message,
+                );
+            }
+        }
+
+        const uri = URI.file(dir).toString();
+        const context = await addContext(uri, overrideMotokoVersion, dir);
+
+        context.mopsArgs = getMopsMocArgs(dir);
+        if (context.mopsArgs.length) {
+            console.log('Moc args from mops.toml:', context.mopsArgs);
+        }
+
+        try {
+            context.packages = await getPackageSources(dir);
+            context.packages.forEach(([name, relativePath]) => {
+                const path = resolveVirtualPath(uri, relativePath);
+                console.log('Package:', name, '->', path, `(${uri})`);
+                context.motoko.usePackage(name, path);
+            });
+        } catch (err) {
+            const detail = String(err).replace(/^Error: /, '');
+            showErrorMessage('Error while resolving Motoko packages:', detail);
+            context.error = String(err);
+            console.warn(err);
+        }
+
+        context.applyMocFlags(settings.extraFlags);
+        populateContextWithWorkspaceFiles(context);
+
+        return context;
+    }
+
+    /**
+     * Write all workspace files to a single context's virtual FS and
+     * update its AST/import resolvers for .mo files under it.
+     */
+    function populateContextWithWorkspaceFiles(context: Context) {
+        if (!workspaceFolders) return;
+
+        const allContents: {
+            virtualPath: string;
+            uri: string;
+            content: string;
+        }[] = [];
+
+        workspaceFolders.forEach((folder) => {
+            const folderPath = resolveFilePath(folder.uri);
+            const relativePaths = glob.sync(virtualFilePattern, {
+                cwd: folderPath,
+                dot: true,
+                ignore: ignoreGlobPatterns,
+                followSymbolicLinks: false,
+            });
+            relativePaths.forEach((relativePath) => {
+                const filePath = join(folderPath, relativePath);
+                try {
+                    const content = readFileSync(filePath, 'utf8');
+                    const virtualPath = resolveVirtualPath(
+                        folder.uri,
+                        relativePath,
+                    );
+                    const fileUri = URI.file(filePath).toString();
+                    allContents.push({ virtualPath, uri: fileUri, content });
+                } catch (err) {
+                    console.error(`Error while reading file ${filePath}:`, err);
+                }
+            });
+        });
+
+        allContents.forEach(({ virtualPath, content }) => {
+            context.motoko.write(virtualPath, content);
+        });
+
+        allContents.forEach(({ uri, content }) => {
+            if (uri.endsWith('.mo') && uri.startsWith(context.uri)) {
+                const { astResolver, importResolver } = context;
+                try {
+                    astResolver.notify(uri, content, isVirtualFileSystemReady);
+                    const program = astResolver.request(
+                        uri,
+                        isVirtualFileSystemReady,
+                    )?.program;
+                    importResolver.update(uri, program);
+                } catch (err) {
+                    console.error(`Error while parsing (${uri}): ${err}`);
+                }
+            }
+        });
+    }
+
+    /**
+     * Ensure the compiler context for the given URI is loaded.
+     * If the URI belongs to a pending (not yet loaded) project, triggers lazy loading.
+     * Returns the loaded context, or the default context if no project matches.
+     */
+    async function ensureContextLoaded(uri: string): Promise<Context> {
+        const pending = findPendingDirectoryForUri(uri);
+        if (!pending) {
+            return getContext(uri);
+        }
+
+        const existing = getLoadingPromise(pending.uri);
+        if (existing) {
+            return existing;
+        }
+
+        const promise = loadProjectContext(pending.dir).then(
+            (context) => {
+                removePendingDirectory(pending.uri);
+                return context;
+            },
+            (err: any) => {
+                const detail = String(err).replace(/^Error: /, '');
+                showErrorMessage(
+                    'Error while loading Motoko packages:',
+                    detail,
+                );
+                console.error(
+                    `Error while reading packages for directory (${pending.dir}): ${err}`,
+                );
+                removePendingDirectory(pending.uri);
+                return getContext(uri);
+            },
+        );
+        setLoadingPromise(pending.uri, promise);
+        return promise;
     }
 
     let dfxResolver: DfxResolver | undefined;
@@ -807,18 +873,19 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
     function processQueue() {
         clearTimeout(checkTimeout);
         clearTimeout(checkWorkspaceTimeout);
-        checkTimeout = setTimeout(() => {
+        checkTimeout = setTimeout(async () => {
             const uri = checkQueue.shift();
             if (checkQueue.length) {
                 processQueue();
             }
             if (uri) {
+                await ensureContextLoaded(uri);
                 checkImmediate(uri);
             }
         }, 0);
     }
     function scheduleCheck(uri: string | TextDocument) {
-        if (disableChecks || loadingPackages) {
+        if (disableChecks) {
             return false;
         }
         if (checkQueue.length === 0) {
@@ -1099,9 +1166,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         allContexts().forEach(({ motoko }) => motoko.delete(path));
     }
 
-    connection.onCodeAction((event) => {
+    connection.onCodeAction(async (event) => {
         const uri = event.textDocument.uri;
         const results: CodeAction[] = [];
+
+        await ensureContextLoaded(uri);
 
         // Organize imports
         // TODO: Consider removing unused imports
@@ -1173,7 +1242,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return results;
     });
 
-    connection.onSignatureHelp(mkOnSignatureHelpHandler(documents, notify));
+    connection.onSignatureHelp(async (params, token) => {
+        await ensureContextLoaded(params.textDocument.uri);
+        return mkOnSignatureHelpHandler(documents, notify)(params, token);
+    });
 
     function findImportUri(
         context: Context,
@@ -1193,7 +1265,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return;
     }
 
-    connection.onCompletion((event) => {
+    connection.onCompletion(async (event) => {
         const { position } = event;
         const { uri } = event.textDocument;
 
@@ -1205,6 +1277,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         try {
             const doc = documents.get(uri);
             if (!doc) return list;
+            await ensureContextLoaded(uri);
             // Flush latest document content to virtual FS before parsing,
             // since onDidChangeContent debounces notify() by 500ms.
             // This prevents getting outdated AST from the cache.
@@ -1558,6 +1631,7 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
     connection.onHover(async (event) => {
         const { position } = event;
         const { uri } = event.textDocument;
+        await ensureContextLoaded(uri);
         const { astResolver } = getContext(uri);
 
         const document = documents.get(uri);
@@ -1613,21 +1687,24 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         };
     });
 
-    connection.onDefinition((event: TextDocumentPositionParams): Location[] => {
-        console.log('[Definition]');
-        try {
-            const definitions = findDefinitions(
-                event.textDocument.uri,
-                event.position,
-            );
-            return definitions.map(locationFromDefinition);
-        } catch (err) {
-            console.error('Error while finding definition:');
-            console.error(err);
-            // throw err;
-            return [];
-        }
-    });
+    connection.onDefinition(
+        async (event: TextDocumentPositionParams): Promise<Location[]> => {
+            console.log('[Definition]');
+            try {
+                await ensureContextLoaded(event.textDocument.uri);
+                const definitions = findDefinitions(
+                    event.textDocument.uri,
+                    event.position,
+                );
+                return definitions.map(locationFromDefinition);
+            } catch (err) {
+                console.error('Error while finding definition:');
+                console.error(err);
+                // throw err;
+                return [];
+            }
+        },
+    );
 
     // connection.onDeclaration(
     //     async (
@@ -1670,9 +1747,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         return results;
     });
 
-    connection.onDocumentSymbol((event) => {
+    connection.onDocumentSymbol(async (event) => {
         const { uri } = event.textDocument;
         const results: DocumentSymbol[] = [];
+        await ensureContextLoaded(uri);
         const status = getContext(uri).astResolver.request(
             uri,
             isVirtualFileSystemReady,
@@ -1721,13 +1799,20 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         ];
     }
 
-    connection.onReferences(mkOnReferencesHandler(isVirtualFileSystemReady));
+    connection.onReferences(async (event, token) => {
+        await ensureContextLoaded(event.textDocument.uri);
+        return mkOnReferencesHandler(isVirtualFileSystemReady)(event, token);
+    });
 
-    connection.onPrepareRename(
-        mkOnPrepareRenameHandler(isVirtualFileSystemReady),
-    );
+    connection.onPrepareRename(async (event, token) => {
+        await ensureContextLoaded(event.textDocument.uri);
+        return mkOnPrepareRenameHandler(isVirtualFileSystemReady)(event, token);
+    });
 
-    connection.onRenameRequest(mkOnRenameHandler(isVirtualFileSystemReady));
+    connection.onRenameRequest(async (event, token) => {
+        await ensureContextLoaded(event.textDocument.uri);
+        return mkOnRenameHandler(isVirtualFileSystemReady)(event, token);
+    });
 
     // Run a file which is recognized as a unit test
     connection.onRequest(
@@ -1892,8 +1977,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         }, 500);
     });
 
-    documents.onDidOpen((event) => {
+    documents.onDidOpen(async (event) => {
         clearCommentStringCache(event.document.uri);
+        await ensureContextLoaded(event.document.uri);
         scheduleCheck(event.document.uri);
     });
     documents.onDidClose(async (event) => {

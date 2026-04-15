@@ -33,6 +33,13 @@ describe('request moc.js', () => {
 
         beforeAll(async () => {
             [client, server] = await defaultBeforeAll(rootUri, true);
+            // Trigger lazy context loading by opening a file and waiting
+            // for the server to finish processing (including moc.js download)
+            const filePath = join(rootPath, 'Main.mo');
+            const fileUri = URI.parse(filePath).toString();
+            const diagsPromise = waitForDiagnostics(client, fileUri);
+            await openTextDocuments(client, new Map(), rootUri, [fileUri]);
+            await diagsPromise;
         });
 
         afterAll(async () => {
@@ -125,6 +132,12 @@ describe('request moc.js', () => {
         beforeAll(async () => {
             settings.mocJsPath = mocPath;
             [client, server] = await defaultBeforeAll(rootUri, true);
+            // Trigger lazy context loading
+            const filePath = join(rootPath, 'Main.mo');
+            const fileUri = URI.parse(filePath).toString();
+            const diagsPromise = waitForDiagnostics(client, fileUri);
+            await openTextDocuments(client, new Map(), rootUri, [fileUri]);
+            await diagsPromise;
         });
 
         afterAll(async () => {
