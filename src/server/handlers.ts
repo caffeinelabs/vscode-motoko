@@ -3,7 +3,7 @@ import { pascalCase } from 'change-case';
 import { exec, execSync } from 'child_process';
 import * as semver from 'semver';
 import * as glob from 'fast-glob';
-import { existsSync, readFileSync, readdirSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { add as mopsAdd } from 'ic-mops/commands/add';
 import { AST, Node, Span } from 'motoko/lib/ast';
 import { keywords } from 'motoko/lib/keywords';
@@ -377,24 +377,8 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                     const mainUri = URI.file(
                                         cm.main,
                                     ).toString();
-                                    // Use next-migration dir when it has .mo files
-                                    // (moc accepts a suffix of the chain), otherwise
-                                    // fall back to the frozen chain dir.
-                                    let migrationDir = cm.chainDir;
-                                    if (cm.nextDir) {
-                                        try {
-                                            const hasFiles = readdirSync(
-                                                cm.nextDir,
-                                            ).some((f) => f.endsWith('.mo'));
-                                            if (hasFiles) {
-                                                migrationDir = cm.nextDir;
-                                            }
-                                        } catch {
-                                            // nextDir doesn't exist, use chainDir
-                                        }
-                                    }
                                     const virtualDir = resolveVirtualPath(
-                                        URI.file(migrationDir).toString(),
+                                        URI.file(cm.chainDir).toString(),
                                     );
                                     context.perFileFlags.set(mainUri, [
                                         `--enhanced-migration=${virtualDir}`,

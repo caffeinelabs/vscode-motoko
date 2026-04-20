@@ -337,7 +337,6 @@ export interface CanisterMigrationConfig {
     name: string;
     main: string;
     chainDir: string;
-    nextDir?: string;
 }
 
 /**
@@ -367,10 +366,6 @@ export function getMopsCanisterMigrations(
                 name,
                 main: join(workspaceDir, main),
                 chainDir: join(workspaceDir, chain),
-                nextDir:
-                    typeof c.migrations?.next === 'string'
-                        ? join(workspaceDir, c.migrations.next)
-                        : undefined,
             });
         }
         return results;
