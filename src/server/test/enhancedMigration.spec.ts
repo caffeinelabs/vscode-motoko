@@ -13,6 +13,10 @@ import { getContext } from '../context';
 
 const rootPath = join(cwd(), 'test', 'enhancedMigration');
 const rootUri = URI.parse(rootPath);
+const backendMainPath = join(rootPath, 'src', 'main.mo');
+const backendMainUri = URI.file(backendMainPath).toString();
+const testMainPath = join(rootPath, 'src', 'test.mo');
+const testMainUri = URI.file(testMainPath).toString();
 
 jest.setTimeout(60000);
 
@@ -30,18 +34,39 @@ describe('enhanced migration', () => {
         await defaultAfterAll(client, server);
     });
 
-    test('--enhanced-migration flag is loaded from mops.toml', () => {
-        const context = getContext(rootUri.toString());
-        expect(context.mopsArgs).toContain('--enhanced-migration=migrations');
+    test('backend canister has per-file --enhanced-migration flag', () => {
+        const ctx = getContext(backendMainUri);
+        const flags = ctx.perFileFlags.get(backendMainUri);
+        expect(flags).toBeDefined();
+        expect(flags!.some((f) => f.startsWith('--enhanced-migration='))).toBe(
+            true,
+        );
     });
 
-    test('Main.mo compiles without errors using migration-provided fields', async () => {
-        const textDocuments = new Map<string, TextDocument>();
-        const filePath = join(rootPath, 'Main.mo');
-        const fileUri = URI.parse(filePath).toString();
+    test('canister has no per-file flags', () => {
+        const ctx = getContext(testMainUri);
+        const flags = ctx.perFileFlags.get(testMainUri);
+        expect(flags).toBeUndefined();
+    });
 
-        const diagsPromise = waitForDiagnostics(client, fileUri);
-        await openTextDocuments(client, textDocuments, rootUri, [fileUri]);
+    test('canister compiles without errors', async () => {
+        const textDocuments = new Map<string, TextDocument>();
+
+        const diagsPromise = waitForDiagnostics(client, testMainUri);
+        await openTextDocuments(client, textDocuments, rootUri, [testMainUri]);
+        const diags = await diagsPromise;
+
+        const errors = diags.filter((d) => d.severity === 1);
+        expect(errors).toHaveLength(0);
+    });
+
+    test('backend main.mo compiles without errors', async () => {
+        const textDocuments = new Map<string, TextDocument>();
+
+        const diagsPromise = waitForDiagnostics(client, backendMainUri);
+        await openTextDocuments(client, textDocuments, rootUri, [
+            backendMainUri,
+        ]);
         const diags = await diagsPromise;
 
         const errors = diags.filter((d) => d.severity === 1);

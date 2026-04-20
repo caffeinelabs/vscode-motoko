@@ -38,6 +38,7 @@ export class Context {
     public packages: [string, string][] | undefined;
     public error: string | undefined;
     public mopsArgs: string[] = [];
+    public perFileFlags = new Map<string, string[]>();
 
     // Optional compiler functions for backwards compatibility with older moc.js versions
     public readonly checkWithScopeCache:
@@ -84,7 +85,7 @@ export class Context {
         }
     }
 
-    applyMocFlags(userFlags: string[] | undefined) {
+    applyMocFlags(userFlags: string[] | undefined, extraArgs?: string[]) {
         const version = this.mocJsInfo.version;
         const validVersion = version && semver.valid(version);
 
@@ -99,6 +100,9 @@ export class Context {
         }
 
         const flags: string[] = [...this.mopsArgs];
+        if (extraArgs?.length) {
+            flags.push(...extraArgs);
+        }
         if (userFlags?.length) {
             flags.push(...userFlags);
         }

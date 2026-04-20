@@ -1,12 +1,10 @@
 import Prim "mo:prim";
 
 actor {
-    let a : Nat;
-    let b : Text;
-    let c : Bool;
-    let d : Int;
+    let counter : Nat;
+    let name : Text;
 
     public func check() : async () {
-        Prim.debugPrint(debug_show { a; b; c; d });
+        Prim.debugPrint(debug_show { counter; name });
     };
 };

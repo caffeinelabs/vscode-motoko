@@ -3,7 +3,7 @@ import { pascalCase } from 'change-case';
 import { exec, execSync } from 'child_process';
 import * as semver from 'semver';
 import * as glob from 'fast-glob';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, readdirSync } from 'fs';
 import { add as mopsAdd } from 'ic-mops/commands/add';
 import { AST, Node, Span } from 'motoko/lib/ast';
 import { keywords } from 'motoko/lib/keywords';
@@ -93,6 +93,7 @@ import {
     getFileText,
     getWorkspaceMocVersion,
     getMopsMocArgs,
+    getMopsCanisterMigrations,
     getRelativeUri,
     isExternalUri,
     rangeContainsPosition,
@@ -368,6 +369,40 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                         context.motoko.usePackage(name, path);
                                     },
                                 );
+
+                                // Register per-file flags for canisters with migrations
+                                const canisterMigrations =
+                                    getMopsCanisterMigrations(dir);
+                                for (const cm of canisterMigrations) {
+                                    const mainUri = URI.file(
+                                        cm.main,
+                                    ).toString();
+                                    // Use next-migration dir when it has .mo files
+                                    // (moc accepts a suffix of the chain), otherwise
+                                    // fall back to the frozen chain dir.
+                                    let migrationDir = cm.chainDir;
+                                    if (cm.nextDir) {
+                                        try {
+                                            const hasFiles = readdirSync(
+                                                cm.nextDir,
+                                            ).some((f) => f.endsWith('.mo'));
+                                            if (hasFiles) {
+                                                migrationDir = cm.nextDir;
+                                            }
+                                        } catch {
+                                            // nextDir doesn't exist, use chainDir
+                                        }
+                                    }
+                                    const virtualDir = resolveVirtualPath(
+                                        URI.file(migrationDir).toString(),
+                                    );
+                                    context.perFileFlags.set(mainUri, [
+                                        `--enhanced-migration=${virtualDir}`,
+                                    ]);
+                                    console.log(
+                                        `Canister '${cm.name}': --enhanced-migration=${virtualDir} for ${cm.main}`,
+                                    );
+                                }
                             } catch (err) {
                                 const detail = String(err).replace(
                                     /^Error: /,
@@ -968,10 +1003,21 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             }
 
             const context = getContext(resolvedUri);
+            const extraFlags = context.perFileFlags.get(resolvedUri);
+            if (extraFlags?.length) {
+                context.applyMocFlags(settings.extraFlags, extraFlags);
+            }
             console.log('~', virtualPath, `(${context.uri || 'default'})`);
-            let diagnostics = context.astResolver.checkDiagnostics(
-                virtualPath,
-            ) as Diagnostic[];
+            let diagnostics: Diagnostic[];
+            try {
+                diagnostics = context.astResolver.checkDiagnostics(
+                    virtualPath,
+                ) as Diagnostic[];
+            } finally {
+                if (extraFlags?.length) {
+                    context.applyMocFlags(settings.extraFlags);
+                }
+            }
             if (context.error) {
                 // Context initialization error
                 // diagnostics.length = 0;

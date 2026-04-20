@@ -333,6 +333,52 @@ export function getMopsMocArgs(workspaceDir: string): string[] {
     }
 }
 
+export interface CanisterMigrationConfig {
+    name: string;
+    main: string;
+    chainDir: string;
+    nextDir?: string;
+}
+
+/**
+ * Reads `[canisters]` from `mops.toml` and returns canisters that have
+ * a `[canisters.<name>.migrations]` section with a `chain` directory.
+ * Paths are resolved to absolute using `workspaceDir` as the base.
+ */
+export function getMopsCanisterMigrations(
+    workspaceDir: string,
+): CanisterMigrationConfig[] {
+    const mopsPath = join(workspaceDir, 'mops.toml');
+    try {
+        const content = readFileSync(mopsPath, 'utf8');
+        const config = toml.parse(content) as any;
+        const canisters = config?.canisters;
+        if (!canisters || typeof canisters !== 'object') {
+            return [];
+        }
+        const results: CanisterMigrationConfig[] = [];
+        for (const [name, canister] of Object.entries(canisters)) {
+            if (!canister || typeof canister !== 'object') continue;
+            const c = canister as any;
+            const main = c.main;
+            const chain = c.migrations?.chain;
+            if (typeof main !== 'string' || typeof chain !== 'string') continue;
+            results.push({
+                name,
+                main: join(workspaceDir, main),
+                chainDir: join(workspaceDir, chain),
+                nextDir:
+                    typeof c.migrations?.next === 'string'
+                        ? join(workspaceDir, c.migrations.next)
+                        : undefined,
+            });
+        }
+        return results;
+    } catch {
+        return [];
+    }
+}
+
 /**
  * Returns path to relevant moc.js downloading required version from the Motoko
  * GitHub releases if needed.

@@ -2,13 +2,16 @@
 
 [canisters.backend]
 main = "src/main.mo"
-args = ["--enhanced-migration=migrations"]
 
-[canisters.backend.check-stable]
-path = ".old/backend.most"
+[canisters.backend.migrations]
+chain = "migrations"
+next = "next-migration"
+
+[canisters.test]
+main = "src/test.mo"
 
 [moc]
 args = ["--default-persistent-actors"]
 
 [toolchain]
-moc = "1.5.0"
+moc = "1.5.1"
