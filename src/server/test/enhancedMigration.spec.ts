@@ -34,30 +34,19 @@ describe('enhanced migration', () => {
         await defaultAfterAll(client, server);
     });
 
-    test('backend canister has per-file --enhanced-migration flag', () => {
-        const ctx = getContext(backendMainUri);
-        const flags = ctx.perFileFlags.get(backendMainUri);
-        expect(flags).toBeDefined();
-        expect(flags!.some((f) => f.startsWith('--enhanced-migration='))).toBe(
-            true,
-        );
-    });
+    test('backend has isolated context, test uses workspace context', () => {
+        const backendCtx = getContext(backendMainUri);
+        const testCtx = getContext(testMainUri);
 
-    test('canister has no per-file flags', () => {
-        const ctx = getContext(testMainUri);
-        const flags = ctx.perFileFlags.get(testMainUri);
-        expect(flags).toBeUndefined();
-    });
-
-    test('canister compiles without errors', async () => {
-        const textDocuments = new Map<string, TextDocument>();
-
-        const diagsPromise = waitForDiagnostics(client, testMainUri);
-        await openTextDocuments(client, textDocuments, rootUri, [testMainUri]);
-        const diags = await diagsPromise;
-
-        const errors = diags.filter((d) => d.severity === 1);
-        expect(errors).toHaveLength(0);
+        expect(backendCtx.motoko.compiler).not.toBe(testCtx.motoko.compiler);
+        expect(
+            backendCtx.mopsArgs.some((f) =>
+                f.startsWith('--enhanced-migration='),
+            ),
+        ).toBe(true);
+        expect(
+            testCtx.mopsArgs.some((f) => f.startsWith('--enhanced-migration=')),
+        ).toBe(false);
     });
 
     test('backend main.mo compiles without errors', async () => {
@@ -67,6 +56,17 @@ describe('enhanced migration', () => {
         await openTextDocuments(client, textDocuments, rootUri, [
             backendMainUri,
         ]);
+        const diags = await diagsPromise;
+
+        const errors = diags.filter((d) => d.severity === 1);
+        expect(errors).toHaveLength(0);
+    });
+
+    test('canister compiles without errors after backend', async () => {
+        const textDocuments = new Map<string, TextDocument>();
+
+        const diagsPromise = waitForDiagnostics(client, testMainUri);
+        await openTextDocuments(client, textDocuments, rootUri, [testMainUri]);
         const diags = await diagsPromise;
 
         const errors = diags.filter((d) => d.severity === 1);

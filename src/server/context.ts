@@ -1,5 +1,6 @@
-import { existsSync } from 'fs';
-import { type Motoko } from 'motoko/lib';
+import { existsSync, readFileSync } from 'fs';
+import wrapMotoko, { type Motoko } from 'motoko/lib';
+import { Module } from 'module';
 import { basename, dirname, isAbsolute, join, resolve } from 'path';
 import * as semver from 'semver';
 import AstResolver from './ast';
@@ -38,7 +39,6 @@ export class Context {
     public packages: [string, string][] | undefined;
     public error: string | undefined;
     public mopsArgs: string[] = [];
-    public perFileFlags = new Map<string, string[]>();
 
     // Optional compiler functions for backwards compatibility with older moc.js versions
     public readonly checkWithScopeCache:
@@ -85,7 +85,7 @@ export class Context {
         }
     }
 
-    applyMocFlags(userFlags: string[] | undefined, extraArgs?: string[]) {
+    applyMocFlags(userFlags: string[] | undefined) {
         const version = this.mocJsInfo.version;
         const validVersion = version && semver.valid(version);
 
@@ -100,9 +100,6 @@ export class Context {
         }
 
         const flags: string[] = [...this.mopsArgs];
-        if (extraArgs?.length) {
-            flags.push(...extraArgs);
-        }
         if (userFlags?.length) {
             flags.push(...userFlags);
         }
@@ -366,6 +363,75 @@ export async function addContext(
         version,
         workspaceRoot || '',
     );
+    const context = new Context(uri, motoko, mocJsInfo);
+    insertContext(context);
+    return context;
+}
+
+// Path to the bundled moc.min.js, shipped both for jest (src/server/compiler)
+// and for the production extension (out/compiler, copied by `compile:motoko`).
+const bundledMocJsPath = join(__dirname, 'compiler', 'moc-bundled.js');
+
+let isolatedCompilerCounter = 0;
+
+/**
+ * Re-execute a CommonJS module file with a fresh module scope, bypassing
+ * Node.js and Jest module caches. Each call returns an independent
+ * `module.exports`, giving us a moc.js compiler with its own internal `Flags`
+ * state.
+ */
+function loadFreshCompiler(mocJsPath: string): any {
+    const code = readFileSync(mocJsPath, 'utf8');
+    const m = new Module(`${mocJsPath}#${++isolatedCompilerCounter}`) as any;
+    m.paths = (Module as any)._nodeModulePaths(dirname(mocJsPath));
+    m._compile(code, mocJsPath);
+    if (!m.exports.Motoko) {
+        throw new Error(
+            `Invalid moc.js at ${mocJsPath}: missing Motoko export`,
+        );
+    }
+    return m.exports.Motoko;
+}
+
+/**
+ * Create a context with a fresh, isolated moc.js instance.
+ *
+ * Used for canister entrypoints that need different compiler flags (e.g.
+ * `--enhanced-migration`). Each isolated instance has its own `Flags` state
+ * in moc.js, preventing flag leaks across canisters that share a single
+ * moc.js instance (`setExtraFlags` does not reset all flags between calls).
+ *
+ * Note: each isolated instance loads and parses ~3MB of moc.js, so workspaces
+ * with many canisters declaring `[canisters.<name>.migrations]` will see
+ * proportional memory growth. If this becomes a concern, consider sharing
+ * one isolated instance across canisters that use the same migration dir.
+ */
+export function addIsolatedContext(
+    uri: string,
+    sourceContext: Context,
+): Context {
+    const existing = contexts.find((other) => uri === other.uri);
+    if (existing) {
+        console.warn('Duplicate isolated context for URI:', uri);
+        return existing;
+    }
+
+    const mocJsPath = sourceContext.mocJsInfo.path ?? bundledMocJsPath;
+    if (!existsSync(mocJsPath)) {
+        throw new Error(
+            `Cannot create isolated moc.js context: ${mocJsPath} not found. ` +
+                `Run 'npm run prepare:moc-bundled' to install it.`,
+        );
+    }
+
+    const compiler = loadFreshCompiler(mocJsPath);
+    const motoko = wrapMotoko(compiler);
+    configureMotokoCompiler(motoko);
+
+    const mocJsInfo: MocJsInfo = {
+        ...sourceContext.mocJsInfo,
+        path: mocJsPath,
+    };
     const context = new Context(uri, motoko, mocJsInfo);
     insertContext(context);
     return context;

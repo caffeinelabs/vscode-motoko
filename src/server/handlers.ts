@@ -53,6 +53,7 @@ import { globalASTCache } from './ast';
 import {
     Context,
     addContext,
+    addIsolatedContext,
     allContexts,
     getContext,
     resetContexts,
@@ -370,22 +371,51 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                     },
                                 );
 
-                                // Register per-file flags for canisters with migrations
+                                // Create isolated moc.js instances for canisters with migrations.
+                                // Per-canister failures must not abort workspace setup, so each
+                                // canister is wrapped in its own try/catch.
                                 const canisterMigrations =
                                     getMopsCanisterMigrations(dir);
                                 for (const cm of canisterMigrations) {
-                                    const mainUri = URI.file(
-                                        cm.main,
-                                    ).toString();
-                                    const virtualDir = resolveVirtualPath(
-                                        URI.file(cm.chainDir).toString(),
-                                    );
-                                    context.perFileFlags.set(mainUri, [
-                                        `--enhanced-migration=${virtualDir}`,
-                                    ]);
-                                    console.log(
-                                        `Canister '${cm.name}': --enhanced-migration=${virtualDir} for ${cm.main}`,
-                                    );
+                                    try {
+                                        const mainUri = URI.file(
+                                            cm.main,
+                                        ).toString();
+                                        const virtualDir = resolveVirtualPath(
+                                            URI.file(cm.chainDir).toString(),
+                                        );
+                                        const canisterCtx = addIsolatedContext(
+                                            mainUri,
+                                            context,
+                                        );
+                                        canisterCtx.mopsArgs = [
+                                            ...context.mopsArgs,
+                                            `--enhanced-migration=${virtualDir}`,
+                                        ];
+                                        canisterCtx.packages = context.packages
+                                            ? [...context.packages]
+                                            : context.packages;
+                                        context.packages?.forEach(
+                                            ([name, relativePath]) => {
+                                                const path = resolveVirtualPath(
+                                                    uri,
+                                                    relativePath,
+                                                );
+                                                canisterCtx.motoko.usePackage(
+                                                    name,
+                                                    path,
+                                                );
+                                            },
+                                        );
+                                        console.log(
+                                            `Canister '${cm.name}': isolated moc.js with --enhanced-migration=${virtualDir} for ${cm.main}`,
+                                        );
+                                    } catch (err) {
+                                        console.warn(
+                                            `Failed to set up isolated context for canister '${cm.name}' (${cm.main}):`,
+                                            err,
+                                        );
+                                    }
                                 }
                             } catch (err) {
                                 const detail = String(err).replace(
@@ -987,21 +1017,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
             }
 
             const context = getContext(resolvedUri);
-            const extraFlags = context.perFileFlags.get(resolvedUri);
-            if (extraFlags?.length) {
-                context.applyMocFlags(settings.extraFlags, extraFlags);
-            }
             console.log('~', virtualPath, `(${context.uri || 'default'})`);
-            let diagnostics: Diagnostic[];
-            try {
-                diagnostics = context.astResolver.checkDiagnostics(
+            let diagnostics: Diagnostic[] =
+                context.astResolver.checkDiagnostics(
                     virtualPath,
                 ) as Diagnostic[];
-            } finally {
-                if (extraFlags?.length) {
-                    context.applyMocFlags(settings.extraFlags);
-                }
-            }
             if (context.error) {
                 // Context initialization error
                 // diagnostics.length = 0;
