@@ -53,7 +53,6 @@ import { globalASTCache } from './ast';
 import {
     Context,
     addContext,
-    addIsolatedContext,
     allContexts,
     getContext,
     resetContexts,
@@ -384,9 +383,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                         const virtualDir = resolveVirtualPath(
                                             URI.file(cm.chainDir).toString(),
                                         );
-                                        const canisterCtx = addIsolatedContext(
+                                        const canisterCtx = await addContext(
                                             mainUri,
-                                            context,
+                                            overrideMotokoVersion,
+                                            dir,
+                                            true, // isolated
                                         );
                                         canisterCtx.mopsArgs = [
                                             ...context.mopsArgs,

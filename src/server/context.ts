@@ -156,21 +156,27 @@ function getMotokoInstanceKey(
     uri: string,
     version: Version,
     workspaceRoot?: string,
+    isolated?: boolean,
 ) {
     return `${uri}:${version || ''}:${settings?.mocJsPath || ''}:${
         workspaceRoot || ''
-    }`;
+    }:${isolated ? 'isolated' : ''}`;
 }
 
 /**
  * Create or reuse a `moc.js` compiler instance.
+ *
+ * When `isolated` is true, the compiler is loaded via `Module._compile` so
+ * each call returns an instance with its own internal `Flags` state — used
+ * for canister entrypoints with per-canister flags (e.g. `--enhanced-migration`).
  */
 async function requestMotokoInstance(
     uri: string,
     version: Version,
     workspaceRoot: string,
+    isolated = false,
 ): Promise<[Motoko, MocJsInfo]> {
-    const key = getMotokoInstanceKey(uri, version, workspaceRoot);
+    const key = getMotokoInstanceKey(uri, version, workspaceRoot, isolated);
     const cached = motokoInstances.get(key);
 
     if (cached) {
@@ -178,20 +184,23 @@ async function requestMotokoInstance(
         return cached;
     }
 
-    Object.keys(require.cache).forEach((key) => {
-        if (
-            key.endsWith('/out/motoko.js') ||
-            key.endsWith('\\out\\motoko.js') ||
-            key.includes('/out/compiler/') ||
-            key.includes('\\out\\compiler\\')
-        ) {
-            delete require.cache[key];
-        }
-    });
+    if (!isolated) {
+        Object.keys(require.cache).forEach((key) => {
+            if (
+                key.endsWith('/out/motoko.js') ||
+                key.endsWith('\\out\\motoko.js') ||
+                key.includes('/out/compiler/') ||
+                key.includes('\\out\\compiler\\')
+            ) {
+                delete require.cache[key];
+            }
+        });
+    }
 
     const [motoko, mocJsInfo] = await createMotokoInstance(
         version,
         workspaceRoot,
+        isolated,
     );
 
     configureMotokoCompiler(motoko);
@@ -214,6 +223,7 @@ function configureMotokoCompiler(motoko: Motoko) {
 async function createMotokoInstance(
     version: Version,
     workspaceRoot: string,
+    isolated = false,
 ): Promise<[Motoko, MocJsInfo]> {
     const configuredMocJsPath = settings.mocJsPath;
     if (configuredMocJsPath) {
@@ -229,7 +239,7 @@ async function createMotokoInstance(
             if (res.isOk()) {
                 const [compiler, path] = res.value;
                 return [
-                    require('motoko/lib').default(compiler),
+                    wrapMotoko(compiler),
                     {
                         // assume that moc.js version in file name is correct, otherwise
                         // use provided version
@@ -258,7 +268,7 @@ async function createMotokoInstance(
                 if (res.isOk()) {
                     const [compiler, path] = res.value;
                     return [
-                        require('motoko/lib').default(compiler),
+                        wrapMotoko(compiler),
                         {
                             version: mocVersion,
                             path,
@@ -284,7 +294,7 @@ async function createMotokoInstance(
             console.log('Using workspace moc.js version:', version);
             const [compiler, path] = res.value;
             return [
-                require('motoko/lib').default(compiler),
+                wrapMotoko(compiler),
                 {
                     version,
                     path,
@@ -303,6 +313,12 @@ async function createMotokoInstance(
 
     console.log('Falling back to bundled motoko package');
 
+    if (isolated) {
+        return [
+            wrapMotoko(loadFreshCompiler(bundledMocJsPath)),
+            { source: 'bundled', path: bundledMocJsPath },
+        ];
+    }
     return [
         require(motokoPath).default,
         { source: 'bundled', path: bundledMocJsPath },
@@ -310,7 +326,9 @@ async function createMotokoInstance(
 
     function getCompiler(path: string): Result<[any, string], Error> {
         try {
-            const compiler = require(path).Motoko;
+            const compiler = isolated
+                ? loadFreshCompiler(path)
+                : require(path).Motoko;
             if (!compiler) {
                 return err(
                     new Error('Invalid moc.js file: missing Motoko export'),
@@ -359,11 +377,16 @@ export function resetContexts() {
 
 /**
  * Register a context for the given directory (specified as a URI).
+ *
+ * Pass `isolated: true` for canister entrypoints that need their own moc.js
+ * instance (e.g. for per-canister `--enhanced-migration` flags), since
+ * `setExtraFlags` does not reset all flags between calls.
  */
 export async function addContext(
     uri: string,
     version?: Version,
     workspaceRoot?: string,
+    isolated = false,
 ): Promise<Context> {
     const existing = contexts.find((other) => uri === other.uri);
     if (existing) {
@@ -374,6 +397,7 @@ export async function addContext(
         uri,
         version,
         workspaceRoot || '',
+        isolated,
     );
     const context = new Context(uri, motoko, mocJsInfo);
     insertContext(context);
@@ -382,12 +406,7 @@ export async function addContext(
 
 let isolatedCompilerCounter = 0;
 
-/**
- * Re-execute a CommonJS module file with a fresh module scope, bypassing
- * Node.js and Jest module caches. Each call returns an independent
- * `module.exports`, giving us a moc.js compiler with its own internal `Flags`
- * state.
- */
+/** Load `moc.js` with a fresh module scope, bypassing the require cache. */
 function loadFreshCompiler(mocJsPath: string): any {
     if (!existsSync(mocJsPath)) {
         throw new Error(
@@ -405,38 +424,6 @@ function loadFreshCompiler(mocJsPath: string): any {
         );
     }
     return m.exports.Motoko;
-}
-
-/**
- * Create a context with a fresh, isolated moc.js instance.
- *
- * Used for canister entrypoints that need different compiler flags (e.g.
- * `--enhanced-migration`). Each isolated instance has its own `Flags` state
- * in moc.js, preventing flag leaks across canisters that share a single
- * moc.js instance (`setExtraFlags` does not reset all flags between calls).
- *
- * Note: each isolated instance loads and parses ~3MB of moc.js, so workspaces
- * with many canisters declaring `[canisters.<name>.migrations]` will see
- * proportional memory growth. If this becomes a concern, consider sharing
- * one isolated instance across canisters that use the same migration dir.
- */
-export function addIsolatedContext(
-    uri: string,
-    sourceContext: Context,
-): Context {
-    const existing = contexts.find((other) => uri === other.uri);
-    if (existing) {
-        console.warn('Duplicate isolated context for URI:', uri);
-        return existing;
-    }
-
-    const compiler = loadFreshCompiler(sourceContext.mocJsInfo.path);
-    const motoko = wrapMotoko(compiler);
-    configureMotokoCompiler(motoko);
-
-    const context = new Context(uri, motoko, sourceContext.mocJsInfo);
-    insertContext(context);
-    return context;
 }
 
 /**
