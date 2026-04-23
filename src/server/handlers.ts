@@ -387,7 +387,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                             mainUri,
                                             overrideMotokoVersion,
                                             dir,
-                                            true, // isolated
                                         );
                                         canisterCtx.mopsArgs = [
                                             ...context.mopsArgs,
