@@ -339,11 +339,7 @@ export interface CanisterMigrationConfig {
     chainDir: string;
 }
 
-/**
- * Reads `[canisters]` from `mops.toml` and returns canisters that have
- * a `[canisters.<name>.migrations]` section with a `chain` directory.
- * Paths are resolved to absolute using `workspaceDir` as the base.
- */
+/** Canisters in `mops.toml` with a `[canisters.<name>.migrations]` chain. */
 export function getMopsCanisterMigrations(
     workspaceDir: string,
 ): CanisterMigrationConfig[] {

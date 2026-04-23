@@ -370,9 +370,6 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                     },
                                 );
 
-                                // Create isolated moc.js instances for canisters with migrations.
-                                // Per-canister failures must not abort workspace setup, so each
-                                // canister is wrapped in its own try/catch.
                                 const canisterMigrations =
                                     getMopsCanisterMigrations(dir);
                                 for (const cm of canisterMigrations) {
