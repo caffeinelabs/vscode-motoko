@@ -124,10 +124,9 @@ describe('mocJsPath configuration', () => {
 
                 expect(context).toBeDefined();
                 expect(context.motoko).toBeDefined();
-                // For default motoko path and version should be undefined
+                // Falls back to bundled compiler
                 expect(context.mocJsInfo.version).toBeUndefined();
-                expect(context.mocJsInfo.path).toBeUndefined();
-                // Verify fallback to default compiler worked
+                expect(context.mocJsInfo.source).toBe('bundled');
                 expect(context.motoko.version).toBeDefined();
             });
         });
@@ -138,10 +137,8 @@ describe('mocJsPath configuration', () => {
             const context = await addContext('test-error');
 
             expect(context.motoko).toBeDefined();
-            // For default motoko path and version should be undefined
             expect(context.mocJsInfo.version).toBeUndefined();
-            expect(context.mocJsInfo.path).toBeUndefined();
-            // Verify fallback to default compiler worked
+            expect(context.mocJsInfo.source).toBe('bundled');
             expect(context.motoko.version).toBeDefined();
         });
 
@@ -152,9 +149,8 @@ describe('mocJsPath configuration', () => {
             const context = await addContext('test-no-export');
             expect(context.motoko).toBeDefined();
             expect(context.motoko.version).toBeDefined();
-            // For default motoko path and version should be undefined
             expect(context.mocJsInfo.version).toBeUndefined();
-            expect(context.mocJsInfo.path).toBeUndefined();
+            expect(context.mocJsInfo.source).toBe('bundled');
         });
     });
 
