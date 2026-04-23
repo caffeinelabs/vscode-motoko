@@ -1018,10 +1018,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
 
             const context = getContext(resolvedUri);
             console.log('~', virtualPath, `(${context.uri || 'default'})`);
-            let diagnostics: Diagnostic[] =
-                context.astResolver.checkDiagnostics(
-                    virtualPath,
-                ) as Diagnostic[];
+            let diagnostics = context.astResolver.checkDiagnostics(
+                virtualPath,
+            ) as Diagnostic[];
             if (context.error) {
                 // Context initialization error
                 // diagnostics.length = 0;
