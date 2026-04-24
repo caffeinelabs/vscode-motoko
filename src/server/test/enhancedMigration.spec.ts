@@ -49,6 +49,30 @@ describe('enhanced migration', () => {
         ).toBe(false);
     });
 
+    test('per-canister Flags do not leak between compiler instances', () => {
+        const backendCtx = getContext(backendMainUri);
+        const testCtx = getContext(testMainUri);
+
+        try {
+            const code = 'actor { let x : Nat; }';
+            backendCtx.motoko.write('probe.mo', code);
+            testCtx.motoko.write('probe.mo', code);
+
+            backendCtx.motoko.setExtraFlags([
+                '--enhanced-migration=/tmp/nope',
+                '--default-persistent-actors',
+            ]);
+            testCtx.motoko.setExtraFlags(['--default-persistent-actors']);
+
+            const testDiags = testCtx.motoko.check('probe.mo');
+            expect(testDiags.some((d: any) => d.code === 'M0257')).toBe(true);
+            expect(testDiags.some((d: any) => d.code === 'M0256')).toBe(false);
+        } finally {
+            backendCtx.applyMocFlags(undefined);
+            testCtx.applyMocFlags(undefined);
+        }
+    });
+
     test('backend main.mo compiles without errors', async () => {
         const textDocuments = new Map<string, TextDocument>();
 

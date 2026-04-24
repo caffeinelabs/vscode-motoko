@@ -130,6 +130,21 @@ export let projectRoot: string;
 
 const DEFAULT_FORMATTER: FormatterKind = 'prettier';
 
+function applyPackages(
+    ctx: Context,
+    packages: [string, string][] | undefined,
+    uri: string,
+    log: boolean,
+) {
+    packages?.forEach(([name, relativePath]) => {
+        const path = resolveVirtualPath(uri, relativePath);
+        if (log) {
+            console.log('Package:', name, '->', path, `(${uri})`);
+        }
+        ctx.motoko.usePackage(name, path);
+    });
+}
+
 export const addHandlers = (connection: Connection, redirectConsole = true) => {
     const packageSourceCache = new Map();
     const showErrorMessage = (message: string, detail?: string) => {
@@ -353,26 +368,16 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
 
                             try {
                                 context.packages = await getPackageSources(dir);
-                                context.packages.forEach(
-                                    ([name, relativePath]) => {
-                                        const path = resolveVirtualPath(
-                                            uri,
-                                            relativePath,
-                                        );
-                                        console.log(
-                                            'Package:',
-                                            name,
-                                            '->',
-                                            path,
-                                            `(${uri})`,
-                                        );
-                                        context.motoko.usePackage(name, path);
-                                    },
+                                applyPackages(
+                                    context,
+                                    context.packages,
+                                    uri,
+                                    true,
                                 );
 
-                                const canisterMigrations =
-                                    getMopsCanisterMigrations(dir);
-                                for (const cm of canisterMigrations) {
+                                for (const cm of getMopsCanisterMigrations(
+                                    dir,
+                                )) {
                                     try {
                                         const mainUri = URI.file(
                                             cm.main,
@@ -385,26 +390,24 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                                             overrideMotokoVersion,
                                             dir,
                                         );
+                                        if (canisterCtx === context) {
+                                            console.warn(
+                                                `Canister '${cm.name}': main URI ${mainUri} collides with workspace context, skipping`,
+                                            );
+                                            continue;
+                                        }
                                         canisterCtx.mopsArgs = [
                                             ...context.mopsArgs,
                                             `--enhanced-migration=${virtualDir}`,
                                         ];
-                                        canisterCtx.packages = context.packages
-                                            ? [...context.packages]
-                                            : context.packages;
-                                        context.packages?.forEach(
-                                            ([name, relativePath]) => {
-                                                const path = resolveVirtualPath(
-                                                    uri,
-                                                    relativePath,
-                                                );
-                                                canisterCtx.motoko.usePackage(
-                                                    name,
-                                                    path,
-                                                );
-                                            },
+                                        canisterCtx.packages = context.packages;
+                                        applyPackages(
+                                            canisterCtx,
+                                            context.packages,
+                                            uri,
+                                            false,
                                         );
-                                        console.log(
+                                        console.debug(
                                             `Canister '${cm.name}': isolated moc.js with --enhanced-migration=${virtualDir} for ${cm.main}`,
                                         );
                                     } catch (err) {

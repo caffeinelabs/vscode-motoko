@@ -11,6 +11,3 @@ main = "src/test.mo"
 
 [moc]
 args = ["--default-persistent-actors"]
-
-[toolchain]
-moc = "1.5.1"

@@ -344,30 +344,37 @@ export function getMopsCanisterMigrations(
     workspaceDir: string,
 ): CanisterMigrationConfig[] {
     const mopsPath = join(workspaceDir, 'mops.toml');
+    let content: string;
     try {
-        const content = readFileSync(mopsPath, 'utf8');
-        const config = toml.parse(content) as any;
-        const canisters = config?.canisters;
-        if (!canisters || typeof canisters !== 'object') {
-            return [];
-        }
-        const results: CanisterMigrationConfig[] = [];
-        for (const [name, canister] of Object.entries(canisters)) {
-            if (!canister || typeof canister !== 'object') continue;
-            const c = canister as any;
-            const main = c.main;
-            const chain = c.migrations?.chain;
-            if (typeof main !== 'string' || typeof chain !== 'string') continue;
-            results.push({
-                name,
-                main: join(workspaceDir, main),
-                chainDir: join(workspaceDir, chain),
-            });
-        }
-        return results;
+        content = readFileSync(mopsPath, 'utf8');
     } catch {
         return [];
     }
+    let config: any;
+    try {
+        config = toml.parse(content);
+    } catch (err) {
+        console.warn(`Failed to parse ${mopsPath}:`, err);
+        return [];
+    }
+    const canisters = config?.canisters;
+    if (!canisters || typeof canisters !== 'object') {
+        return [];
+    }
+    const results: CanisterMigrationConfig[] = [];
+    for (const [name, canister] of Object.entries(canisters)) {
+        if (!canister || typeof canister !== 'object') continue;
+        const c = canister as any;
+        const main = c.main;
+        const chain = c.migrations?.chain;
+        if (typeof main !== 'string' || typeof chain !== 'string') continue;
+        results.push({
+            name,
+            main: join(workspaceDir, main),
+            chainDir: join(workspaceDir, chain),
+        });
+    }
+    return results;
 }
 
 /**

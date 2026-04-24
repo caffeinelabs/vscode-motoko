@@ -334,6 +334,7 @@ requestDefaultContext(); // Always add a default context
  */
 export function resetContexts() {
     contexts.length = 0;
+    motokoInstances.clear();
     if (defaultContext) {
         defaultContext = undefined;
         requestDefaultContext(); // Regenerate default context
@@ -413,8 +414,14 @@ export function allContexts(): Context[] {
 /**
  * Find the most relevant context for the given URI.
  */
+function matchesContext(uri: string, ctxUri: string): boolean {
+    if (!ctxUri) return true; // default context matches everything
+    if (uri === ctxUri) return true; // exact (canister-file contexts)
+    return uri.startsWith(ctxUri) && uri[ctxUri.length] === '/';
+}
+
 export function getContext(uri: string): Context {
-    const context = contexts.find((context) => uri.startsWith(context.uri));
+    const context = contexts.find((c) => matchesContext(uri, c.uri));
     if (context) {
         return context;
     }
@@ -426,5 +433,5 @@ export function getContext(uri: string): Context {
  * Check if a context is available for the given URI.
  */
 export function hasContext(uri: string): boolean {
-    return contexts.some((context) => uri.startsWith(context.uri));
+    return contexts.some((c) => matchesContext(uri, c.uri));
 }
