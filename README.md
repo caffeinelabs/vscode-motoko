@@ -3,44 +3,44 @@
 > #### Motoko language support for [Visual Studio Code](https://code.visualstudio.com/).
 
 [![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/dfinity-foundation.vscode-motoko?color=brightgreen&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/dfinity/prettier-plugin-motoko/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/caffeinelabs/prettier-plugin-motoko/issues)
 
 ## Overview
 
 [Motoko](https://internetcomputer.org/docs/current/motoko/main/motoko) is a high-level smart contract language for the [Internet Computer](https://internetcomputer.org/).
 
-This IDE extension provides type checking, formatting, snippets, and more for [Motoko canister development](https://internetcomputer.org/docs/current/developer-docs/build/cdks/motoko-dfinity/motoko/).
+This IDE extension provides type checking, formatting, snippets, and more for [Motoko canister development](https://internetcomputer.org/docs/current/developer-docs/build/cdks/motoko-caffeinelabs/motoko/).
 
-[![Showcase](https://github.com/dfinity/vscode-motoko/raw/master/guide/assets/intro.webp)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
+[![Showcase](https://github.com/caffeinelabs/vscode-motoko/raw/master/guide/assets/intro.webp)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
 
 ## Installation
 
 Get this extension through the [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko), or alternatively the [Extensions panel](https://code.visualstudio.com/docs/editor/extension-marketplace) in your VS Code project.
 
-VSCodium users can download the extension through [Open VSX](https://open-vsx.org/extension/dfinity-foundation/vscode-motoko) or the [GitHub releases](https://github.com/dfinity/vscode-motoko/releases) page.
+VSCodium users can download the extension through [Open VSX](https://open-vsx.org/extension/dfinity-foundation/vscode-motoko) or the [GitHub releases](https://github.com/caffeinelabs/vscode-motoko/releases) page.
 
 ## Keyboard Shortcuts
 
 Below are the default key bindings for commonly used features supported in the extension:
 
-- **Code formatter** (`Shift` + `Alt` + `F`): format a Motoko file using [prettier-plugin-motoko](https://github.com/dfinity/prettier-plugin-motoko).
+- **Code formatter** (`Shift` + `Alt` + `F`): format a Motoko file using [prettier-plugin-motoko](https://github.com/caffeinelabs/prettier-plugin-motoko).
 - **Organize imports** (`Shift` + `Alt` + `O`): group and sort imports at the top of your Motoko file.
 - **Import code action** (`Ctrl/Cmd` + `.` while hovering over an unresolved variable): show quick-fix options.
 - **Go to definition** (`F12`): jump to the definition of a local or imported identifier.
 - **IntelliSense** (`Ctrl` + `Space`): view all available autocompletions and code snippets.
 
-[![Snippets](https://github.com/dfinity/vscode-motoko/raw/master/guide/assets/snippets.png)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
+[![Snippets](https://github.com/caffeinelabs/vscode-motoko/raw/master/guide/assets/snippets.png)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
 
 ## Other Features
 
 - Deploy to the Internet Computer mainnet using a right-click context menu action.
-- [Mops](https://mops.one/) and [Vessel](https://github.com/dfinity/vessel) (the two most popular Motoko package managers) are supported out-of-the-box in this extension.
+- [Mops](https://mops.one/) and [Vessel](https://github.com/caffeinelabs/vessel) (the two most popular Motoko package managers) are supported out-of-the-box in this extension.
 - Quickly convert between Motoko types using code snippets such as `array-2-buffer` or `principal-2-text`.
 - In case you're hoping to learn Motoko without installing `dfx`, the Motoko VS Code extension works standalone on all major operating systems (including Windows).
 - This extension also provides schema validation and autocompletion for `dfx.json` config files.
 - View type information and documentation by hovering over function names, imports, and other expressions.
 
-[![Tooltips](https://github.com/dfinity/vscode-motoko/raw/master/guide/assets/tooltips.png)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
+[![Tooltips](https://github.com/caffeinelabs/vscode-motoko/raw/master/guide/assets/tooltips.png)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
 
 ## Commands
 
@@ -48,7 +48,7 @@ Below are the default key bindings for commonly used features supported in the e
 - `Motoko: Deploy (20 minutes)`: Temporarily deploys the currently open file to the Internet Computer
 - `Motoko: Import Mops Package...`: Search, install and import a package from [Mops](https://mops.one)
 
-[![Temporary deployment](https://github.com/dfinity/vscode-motoko/raw/master/guide/assets/deploy.png)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
+[![Temporary deployment](https://github.com/caffeinelabs/vscode-motoko/raw/master/guide/assets/deploy.png)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
 
 ## Settings
 
@@ -80,7 +80,7 @@ If you want VS Code to automatically format Motoko files on save, consider addin
 Ensure that [Node.js >= 24.x](https://nodejs.org/en/) and [Cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html) are installed on your system.
 
 ```bash
-git clone https://github.com/dfinity/vscode-motoko
+git clone https://github.com/caffeinelabs/vscode-motoko
 cd vscode-motoko
 npm install
 ```
@@ -109,4 +109,4 @@ Alternatively, right-click the `.vsix` file and then select the "Install Extensi
 
 ---
 
-Community [PRs](https://github.com/dfinity/vscode-motoko/pulls) are welcome! Be sure to check the list of [open issues](https://github.com/dfinity/vscode-motoko/issues) in case anything catches your eye.
+Community [PRs](https://github.com/caffeinelabs/vscode-motoko/pulls) are welcome! Be sure to check the list of [open issues](https://github.com/caffeinelabs/vscode-motoko/issues) in case anything catches your eye.
