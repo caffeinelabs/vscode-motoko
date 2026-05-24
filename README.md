@@ -3,13 +3,13 @@
 > #### Motoko language support for [Visual Studio Code](https://code.visualstudio.com/).
 
 [![Visual Studio Marketplace](https://img.shields.io/visual-studio-marketplace/v/dfinity-foundation.vscode-motoko?color=brightgreen&logo=visual-studio-code)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/dfinity/prettier-plugin-motoko/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/caffeinelabs/prettier-plugin-motoko/issues)
 
 ## Overview
 
 [Motoko](https://internetcomputer.org/docs/current/motoko/main/motoko) is a high-level smart contract language for the [Internet Computer](https://internetcomputer.org/).
 
-This IDE extension provides type checking, formatting, snippets, and more for [Motoko canister development](https://internetcomputer.org/docs/current/developer-docs/build/cdks/motoko-dfinity/motoko/).
+This IDE extension provides type checking, formatting, snippets, and more for [Motoko canister development](https://internetcomputer.org/docs/current/developer-docs/build/cdks/motoko-caffeinelabs/motoko/).
 
 [![Showcase](https://github.com/caffeinelabs/vscode-motoko/raw/master/guide/assets/intro.webp)](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko)
 
@@ -17,13 +17,13 @@ This IDE extension provides type checking, formatting, snippets, and more for [M
 
 Get this extension through the [VS Marketplace](https://marketplace.visualstudio.com/items?itemName=dfinity-foundation.vscode-motoko), or alternatively the [Extensions panel](https://code.visualstudio.com/docs/editor/extension-marketplace) in your VS Code project.
 
-VSCodium users can download the extension through [Open VSX](https://open-vsx.org/extension/dfinity-foundation/vscode-motoko) or the [GitHub releases](https://github.com/dfinity/vscode-motoko/releases) page.
+VSCodium users can download the extension through [Open VSX](https://open-vsx.org/extension/dfinity-foundation/vscode-motoko) or the [GitHub releases](https://github.com/caffeinelabs/vscode-motoko/releases) page.
 
 ## Keyboard Shortcuts
 
 Below are the default key bindings for commonly used features supported in the extension:
 
-- **Code formatter** (`Shift` + `Alt` + `F`): format a Motoko file using [prettier-plugin-motoko](https://github.com/dfinity/prettier-plugin-motoko).
+- **Code formatter** (`Shift` + `Alt` + `F`): format a Motoko file using [prettier-plugin-motoko](https://github.com/caffeinelabs/prettier-plugin-motoko).
 - **Organize imports** (`Shift` + `Alt` + `O`): group and sort imports at the top of your Motoko file.
 - **Import code action** (`Ctrl/Cmd` + `.` while hovering over an unresolved variable): show quick-fix options.
 - **Go to definition** (`F12`): jump to the definition of a local or imported identifier.
