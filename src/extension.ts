@@ -36,6 +36,31 @@ import { ignoreGlobPatterns, watchGlob } from './common/watchConfig';
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
+    // Lite mode: skip the language server entirely (and everything that depends
+    // on it) to reduce memory and CPU usage. Keeps syntax highlighting,
+    // snippets, and dfx.json schema validation, since those don't come from
+    // the server. Formatting is also server-provided, so it's disabled too.
+    const lite = workspace.getConfiguration('motoko').get<boolean>('lite');
+    if (lite) {
+        // Log channel is only created in lite mode, so regular mode has zero
+        // footprint. Since there is no language server in lite mode, this
+        // single entry is the only place users can see that the setting is on.
+        const liteLogger = window.createOutputChannel('Motoko', {
+            log: true,
+        });
+        liteLogger.appendLine(
+            `Motoko lite mode is ON (motoko.lite): the language server is disabled, so type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, formatting, and the "Import Mops Package" command are unavailable. Syntax highlighting, snippets, and dfx.json schema validation keep working. Set "motoko.lite" to false and reload the window to re-enable the language server.`,
+        );
+        context.subscriptions.push(
+            liteLogger,
+            commands.registerCommand('motoko.startService', () =>
+                window.showInformationMessage(
+                    'Motoko lite mode is on: the language server is disabled. Turn off "motoko.lite" to enable type checking, completions, hover, and navigation.',
+                ),
+            ),
+        );
+        return;
+    }
     context.subscriptions.push(
         commands.registerCommand('motoko.startService', () =>
             startServer(context),
