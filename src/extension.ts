@@ -36,6 +36,19 @@ import { ignoreGlobPatterns, watchGlob } from './common/watchConfig';
 let client: LanguageClient;
 
 export function activate(context: ExtensionContext) {
+    // Lite mode: skip the language server entirely (and everything that depends
+    // on it) to reduce memory and CPU usage. Keeps syntax highlighting,
+    // formatting, and snippets, since those don't come from the server.
+    if (workspace.getConfiguration('motoko').get<boolean>('lite')) {
+        context.subscriptions.push(
+            commands.registerCommand('motoko.startService', () =>
+                window.showInformationMessage(
+                    'Motoko lite mode is on: the language server is disabled. Turn off "motoko.lite" to enable type checking, completions, hover, and navigation.',
+                ),
+            ),
+        );
+        return;
+    }
     context.subscriptions.push(
         commands.registerCommand('motoko.startService', () =>
             startServer(context),

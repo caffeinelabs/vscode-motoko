@@ -56,6 +56,7 @@ Below are the default key bindings for commonly used features supported in the e
 - `motoko.canister`: The default canister name to use in multi-canister projects
 - `motoko.formatter`: The formatter used by the language server
 - `motoko.mocJsPath`: Path to moc.js file for using a custom Motoko version
+- `motoko.lite`: Light mode. Disables the language server (type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, and the "Import Mops Package" command) to reduce memory and CPU usage. Syntax highlighting, formatting, snippets, and `dfx.json` schema validation keep working, since none of those come from the language server. Set this (e.g. `"motoko.lite": true`) in your `settings.json` when you want a minimal, lightweight Motoko editing experience — it takes effect after reloading the window.
 
 ## Advanced Configuration
 

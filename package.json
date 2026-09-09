@@ -2,7 +2,7 @@
     "name": "vscode-motoko",
     "displayName": "Motoko",
     "description": "Motoko language support",
-    "version": "0.23.6",
+    "version": "0.24.0",
     "publisher": "dfinity-foundation",
     "repository": "https://github.com/caffeinelabs/vscode-motoko",
     "engines": {
@@ -125,6 +125,12 @@
                     "type": "string",
                     "default": "",
                     "description": "Path to moc.js file for using a custom Motoko version (absolute, or relative to workspace root). Only load moc.js files from trusted sources."
+                },
+                "motoko.lite": {
+                    "scope": "resource",
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Light mode: disables the language server (type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, and the 'Import Mops Package' command) to reduce memory and CPU usage. Keeps syntax highlighting, formatting, and snippets. Takes effect after reloading the window."
                 }
             }
         },
