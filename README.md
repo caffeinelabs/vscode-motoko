@@ -56,11 +56,13 @@ Below are the default key bindings for commonly used features supported in the e
 - `motoko.canister`: The default canister name to use in multi-canister projects
 - `motoko.formatter`: The formatter used by the language server
 - `motoko.mocJsPath`: Path to moc.js file for using a custom Motoko version
-- `motoko.lite`: Light mode. Disables the language server (type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, **format on save / format document**, and the "Import Mops Package" command) to reduce memory and CPU usage. Syntax highlighting, snippets, and `dfx.json` schema validation keep working — those come from the TextMate grammar and schema validator, not the language server. Set this (e.g. `"motoko.lite": true`) in your **workspace** `settings.json` when you want a minimal, lightweight Motoko editing experience. Note: because this is a workspace-scoped (`scope: "resource"`) setting, setting it in your *user* or *remote* `settings.json` will have no effect. It takes effect after reloading the window.
+- `motoko.lite`: Light mode. Disables the language server (type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, **format on save / format document**, and the "Import Mops Package" command) to reduce memory and CPU usage. Syntax highlighting, snippets, and `dfx.json` schema validation keep working — those come from the TextMate grammar, the snippets contribution, and the built-in JSON validator, not from the language server. Set this (e.g. `"motoko.lite": true`) when you want a minimal, lightweight Motoko editing experience. It is `resource`-scoped, so you can set it in your user/remote settings to enable lite mode everywhere, or in a workspace/folder's `.vscode/settings.json` to enable it only for that project. It takes effect after reloading the window.
 
 ## Advanced Configuration
 
 If you want VS Code to automatically format Motoko files on save, consider adding the following to your `settings.json` configuration:
+
+> **Note:** these formatter settings only take effect when the language server is running. With `motoko.lite` enabled (see the `motoko.lite` setting above), format-on-save is disabled, since formatting is provided by the language server.
 
 ```json
 {
