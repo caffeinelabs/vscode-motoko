@@ -145,6 +145,11 @@ const contexts: Context[] = [];
 // Reuse `motoko` npm package instances to limit memory usage
 const motokoInstances = new Map<string, [Motoko, MocJsInfo]>();
 
+// Discovered project directories not yet loaded (uri → dir path)
+const pendingDirectories = new Map<string, string>();
+// Deduplication of in-flight lazy loads (uri → loading promise)
+const loadingPromises = new Map<string, Promise<Context>>();
+
 function getMotokoInstanceKey(
     uri: string,
     version: Version,
@@ -338,10 +343,46 @@ requestDefaultContext(); // Always add a default context
  */
 export function resetContexts() {
     contexts.length = 0;
+    pendingDirectories.clear();
+    loadingPromises.clear();
     if (defaultContext) {
         defaultContext = undefined;
         requestDefaultContext(); // Regenerate default context
     }
+}
+
+export function registerPendingDirectory(uri: string, dir: string) {
+    pendingDirectories.set(uri, dir);
+}
+
+/**
+ * Find the pending directory whose URI is the longest prefix of the given file URI.
+ */
+export function findPendingDirectoryForUri(
+    fileUri: string,
+): { uri: string; dir: string } | undefined {
+    let match: { uri: string; dir: string } | undefined;
+    for (const [uri, dir] of pendingDirectories) {
+        if (fileUri.startsWith(uri)) {
+            if (!match || uri.length > match.uri.length) {
+                match = { uri, dir };
+            }
+        }
+    }
+    return match;
+}
+
+export function removePendingDirectory(uri: string) {
+    pendingDirectories.delete(uri);
+    loadingPromises.delete(uri);
+}
+
+export function getLoadingPromise(uri: string): Promise<Context> | undefined {
+    return loadingPromises.get(uri);
+}
+
+export function setLoadingPromise(uri: string, promise: Promise<Context>) {
+    loadingPromises.set(uri, promise);
 }
 
 /**
@@ -400,13 +441,16 @@ export function allContexts(): Context[] {
 
 /**
  * Find the most relevant context for the given URI.
+ * Falls back to the default context for URIs with a pending (not yet loaded) project.
  */
 export function getContext(uri: string): Context {
     const context = contexts.find((context) => uri.startsWith(context.uri));
     if (context) {
         return context;
     }
-    console.warn('Unknown context for URI:', uri);
+    if (!findPendingDirectoryForUri(uri)) {
+        console.warn('Unknown context for URI:', uri);
+    }
     return requestDefaultContext();
 }
 

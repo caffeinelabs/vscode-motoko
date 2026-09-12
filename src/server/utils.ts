@@ -1,5 +1,13 @@
-import { readFileSync, readdirSync, createWriteStream, existsSync } from 'fs';
+import {
+    readFileSync,
+    readdirSync,
+    createWriteStream,
+    existsSync,
+    writeFileSync,
+    mkdirSync,
+} from 'fs';
 import { unlink } from 'fs/promises';
+import { createHash } from 'crypto';
 import { join, sep, basename } from 'path';
 import * as motokoPlugin from 'prettier-plugin-motoko';
 import * as prettier from 'prettier/standalone';
@@ -438,4 +446,63 @@ function removeOldMocVersions(path: string): ResultAsync<string[], Error> {
         );
     }
     return okAsync([]);
+}
+
+interface SourcesCache {
+    hash: string;
+    sources: [string, string][];
+}
+
+const SOURCES_CACHE_FILENAME = '.sources-cache.json';
+
+function computeSourcesCacheHash(dir: string): string | undefined {
+    const mopsToml = join(dir, 'mops.toml');
+    if (!existsSync(mopsToml)) return undefined;
+
+    const hash = createHash('sha256');
+    hash.update(readFileSync(mopsToml, 'utf8'));
+    const mopsLock = join(dir, 'mops.lock');
+    if (existsSync(mopsLock)) {
+        hash.update(readFileSync(mopsLock, 'utf8'));
+    }
+    return hash.digest('hex');
+}
+
+export function readSourcesCache(dir: string): [string, string][] | undefined {
+    const hash = computeSourcesCacheHash(dir);
+    if (!hash) return undefined;
+
+    const cachePath = join(dir, '.mops', SOURCES_CACHE_FILENAME);
+    try {
+        if (!existsSync(cachePath)) return undefined;
+        const cache: SourcesCache = JSON.parse(readFileSync(cachePath, 'utf8'));
+        if (cache.hash === hash && Array.isArray(cache.sources)) {
+            return cache.sources;
+        }
+    } catch {
+        // Corrupted cache, ignore
+    }
+    return undefined;
+}
+
+export function writeSourcesCache(
+    dir: string,
+    sources: [string, string][],
+): void {
+    const hash = computeSourcesCacheHash(dir);
+    if (!hash) return;
+
+    const cacheDir = join(dir, '.mops');
+    try {
+        if (!existsSync(cacheDir)) {
+            mkdirSync(cacheDir, { recursive: true });
+        }
+        const cache: SourcesCache = { hash, sources };
+        writeFileSync(
+            join(cacheDir, SOURCES_CACHE_FILENAME),
+            JSON.stringify(cache),
+        );
+    } catch (err) {
+        console.warn('Failed to write sources cache:', err);
+    }
 }
