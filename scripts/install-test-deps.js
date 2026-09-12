@@ -21,7 +21,13 @@ function install(dir) {
     });
 }
 
-Promise.all(dirs.map(install)).then(
+async function main() {
+    for (const dir of dirs) {
+        await install(dir);
+    }
+}
+
+main().then(
     () => console.log('All test dependencies installed.'),
     (err) => {
         console.error(err.message);
