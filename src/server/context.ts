@@ -331,7 +331,14 @@ function requestDefaultContext() {
     }
     return defaultContext;
 }
-requestDefaultContext(); // Always add a default context
+
+/**
+ * Create the default context if it doesn't exist yet. Called when the server
+ * starts in non-lite mode, so that lite mode never loads the compiler.
+ */
+export function initContexts() {
+    requestDefaultContext();
+}
 
 /**
  * Reset all contexts (used to update Vessel configuration).

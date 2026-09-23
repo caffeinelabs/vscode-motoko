@@ -130,7 +130,7 @@
                     "scope": "resource",
                     "type": "boolean",
                     "default": false,
-                    "description": "Light mode: disables the language server (type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, format on save / format document, and the 'Import Mops Package' command) to reduce memory and CPU usage. Keeps syntax highlighting, snippets, and dfx.json schema validation. See the README 'motoko.lite' setting for details. Takes effect after reloading the window."
+                    "description": "Light mode: runs the language server without the Motoko compiler, so type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, and the 'Import Mops Package' command are unavailable, to reduce memory and CPU usage. Formatting (format on save / format document), syntax highlighting, snippets, and dfx.json schema validation keep working. See the README 'motoko.lite' setting for details. Takes effect after reloading the window."
                 }
             }
         },

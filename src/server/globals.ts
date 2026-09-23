@@ -7,6 +7,8 @@ export interface Settings {
 export interface InitializationOptions {
     formatter?: FormatterKind;
     useDefaultMocJs?: boolean;
+    /** Omit the Motoko compiler: formatting only, no type checking or navigation. */
+    lite?: boolean;
 }
 
 export interface MotokoSettings {
