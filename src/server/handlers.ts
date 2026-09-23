@@ -55,6 +55,7 @@ import {
     addContext,
     allContexts,
     getContext,
+    initContexts,
     resetContexts,
 } from './context';
 import { addContextualDotCompletions } from './completions';
@@ -131,6 +132,11 @@ const DEFAULT_FORMATTER: FormatterKind = 'prettier';
 
 export const addHandlers = (connection: Connection, redirectConsole = true) => {
     const packageSourceCache = new Map();
+
+    // Lite mode runs the server without the Motoko compiler: only document
+    // sync and formatting are active. Set from the client's initialization
+    // options before any handler can fire.
+    let isLite = false;
     const showErrorMessage = (message: string, detail?: string) => {
         const trimmedDetail = detail?.trim();
         const formatted = trimmedDetail
@@ -612,38 +618,10 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         setInitializationOptions(
             (event.initializationOptions as InitializationOptions) || {},
         );
+        isLite = !!initializationOptions.lite;
 
         const result: InitializeResult = {
             capabilities: {
-                completionProvider: {
-                    resolveProvider: false,
-                    triggerCharacters: ['.'],
-                },
-                definitionProvider: true,
-                // declarationProvider: true,
-                referencesProvider: true,
-                renameProvider: {
-                    prepareProvider: true,
-                },
-                codeActionProvider: {
-                    codeActionKinds: [
-                        CodeActionKind.QuickFix,
-                        CodeActionKind.SourceOrganizeImports,
-                    ],
-                },
-                hoverProvider: true,
-                // executeCommandProvider: { commands: [] },
-                workspaceSymbolProvider: true,
-                documentSymbolProvider: true,
-                signatureHelpProvider: {
-                    triggerCharacters: ['(', ','],
-                    retriggerCharacters: [','],
-                },
-                // diagnosticProvider: {
-                //     documentSelector: ['motoko'],
-                //     interFileDependencies: true,
-                //     workspaceDiagnostics: false,
-                // },
                 textDocumentSync: TextDocumentSyncKind.Full,
                 documentFormattingProvider: true,
                 workspace: {
@@ -651,15 +629,50 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                         supported: !!workspaceFolders,
                     },
                 },
+                // Everything below is compiler-backed, so it is unavailable in
+                // lite mode. Leaving the providers unregistered keeps the
+                // client from sending requests the server can't answer.
+                ...(isLite
+                    ? {}
+                    : {
+                          completionProvider: {
+                              resolveProvider: false,
+                              triggerCharacters: ['.'],
+                          },
+                          definitionProvider: true,
+                          // declarationProvider: true,
+                          referencesProvider: true,
+                          renameProvider: {
+                              prepareProvider: true,
+                          },
+                          codeActionProvider: {
+                              codeActionKinds: [
+                                  CodeActionKind.QuickFix,
+                                  CodeActionKind.SourceOrganizeImports,
+                              ],
+                          },
+                          hoverProvider: true,
+                          // executeCommandProvider: { commands: [] },
+                          workspaceSymbolProvider: true,
+                          documentSymbolProvider: true,
+                          signatureHelpProvider: {
+                              triggerCharacters: ['(', ','],
+                              retriggerCharacters: [','],
+                          },
+                          // diagnosticProvider: {
+                          //     documentSelector: ['motoko'],
+                          //     interFileDependencies: true,
+                          //     workspaceDiagnostics: false,
+                          // },
+                      }),
             },
         };
         return result;
     });
 
     connection.onInitialized(() => {
-        connection.client.register(DidChangeWatchedFilesNotification.type, {
-            watchers: [{ globPattern: virtualFilePattern }],
-        });
+        // Tracked in both modes: the formatter resolves `.prettierignore`
+        // from the workspace folders.
         connection.workspace?.onDidChangeWorkspaceFolders((event) => {
             const folders = workspaceFolders;
             if (!folders) {
@@ -677,13 +690,33 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 folders.push(workspaceFolder);
             });
 
-            notifyWorkspace();
+            if (!isLite) {
+                notifyWorkspace();
+            }
+        });
+
+        if (isLite) {
+            // No compiler, and none of the workspace/package/dfx resolution
+            // below is reachable from a formatting-only server, so there is
+            // nothing to wait for before signalling readiness.
+            connection.sendNotification(TEST_SERVER_INITIALIZED, {});
+            return;
+        }
+
+        initContexts();
+
+        connection.client.register(DidChangeWatchedFilesNotification.type, {
+            watchers: [{ globPattern: virtualFilePattern }],
         });
 
         notifyPackageConfigChange();
     });
 
     connection.onDidChangeWatchedFiles((event) => {
+        if (isLite) {
+            return;
+        }
+
         event.changes.forEach((change) => {
             try {
                 if (change.type === FileChangeType.Deleted) {
@@ -724,7 +757,11 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
 
     connection.onDidChangeConfiguration((event) => {
         setSettings((<Settings>event.settings).motoko || {});
-        notifyPackageConfigChange();
+        if (!isLite) {
+            // The formatter kind comes from `settings`, but package resolution
+            // requires the compiler.
+            notifyPackageConfigChange();
+        }
     });
 
     connection.onDocumentFormatting((params) => {
@@ -1880,6 +1917,9 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
         const document = event.document;
         const { uri } = document;
         clearCommentStringCache(uri);
+        if (isLite) {
+            return;
+        }
         if (uri === validatingUri) {
             clearTimeout(validatingTimeout);
         }
@@ -1894,10 +1934,16 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
 
     documents.onDidOpen((event) => {
         clearCommentStringCache(event.document.uri);
+        if (isLite) {
+            return;
+        }
         scheduleCheck(event.document.uri);
     });
     documents.onDidClose(async (event) => {
         clearCommentStringCache(event.document.uri);
+        if (isLite) {
+            return;
+        }
         await sendDiagnostics({
             uri: event.document.uri,
             diagnostics: [],

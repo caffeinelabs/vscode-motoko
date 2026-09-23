@@ -41,4 +41,12 @@ describe('document formatting', () => {
         const edits = await requestFormatting({ formatter: 'none' });
         expect(edits).toHaveLength(0);
     });
+
+    test('formats in lite mode', async () => {
+        const edits = await requestFormatting({ lite: true });
+        expect(edits).toHaveLength(1);
+        expect(edits[0].newText).toBe(
+            'module {\n    public func hello() : async () {};\n};\n',
+        );
+    });
 });
