@@ -671,19 +671,8 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
     });
 
     connection.onInitialized(() => {
-        if (isLite) {
-            // No compiler, and none of the workspace/package/dfx resolution
-            // below is reachable from a formatting-only server, so there is
-            // nothing to wait for before signalling readiness.
-            connection.sendNotification(TEST_SERVER_INITIALIZED, {});
-            return;
-        }
-
-        initContexts();
-
-        connection.client.register(DidChangeWatchedFilesNotification.type, {
-            watchers: [{ globPattern: virtualFilePattern }],
-        });
+        // Tracked in both modes: the formatter resolves `.prettierignore`
+        // from the workspace folders.
         connection.workspace?.onDidChangeWorkspaceFolders((event) => {
             const folders = workspaceFolders;
             if (!folders) {
@@ -701,7 +690,23 @@ export const addHandlers = (connection: Connection, redirectConsole = true) => {
                 folders.push(workspaceFolder);
             });
 
-            notifyWorkspace();
+            if (!isLite) {
+                notifyWorkspace();
+            }
+        });
+
+        if (isLite) {
+            // No compiler, and none of the workspace/package/dfx resolution
+            // below is reachable from a formatting-only server, so there is
+            // nothing to wait for before signalling readiness.
+            connection.sendNotification(TEST_SERVER_INITIALIZED, {});
+            return;
+        }
+
+        initContexts();
+
+        connection.client.register(DidChangeWatchedFilesNotification.type, {
+            watchers: [{ globPattern: virtualFilePattern }],
         });
 
         notifyPackageConfigChange();

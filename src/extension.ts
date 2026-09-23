@@ -34,6 +34,9 @@ import {
 import { ignoreGlobPatterns, watchGlob } from './common/watchConfig';
 
 let client: LanguageClient;
+// Read once at activation: the commands registered below depend on it, so a
+// server restart must not pick up a changed value before the window reloads.
+let lite = false;
 
 export function activate(context: ExtensionContext) {
     // Lite mode starts the language server without the Motoko compiler: the
@@ -41,7 +44,7 @@ export function activate(context: ExtensionContext) {
     // navigation, and the workspace/package scanning that only the compiler
     // needs. Syntax highlighting, snippets, and dfx.json schema validation come
     // from the client and are unaffected either way.
-    const lite = workspace.getConfiguration('motoko').get<boolean>('lite');
+    lite = workspace.getConfiguration('motoko').get<boolean>('lite') ?? false;
     context.subscriptions.push(
         commands.registerCommand('motoko.startService', () =>
             startServer(context),
@@ -54,7 +57,7 @@ export function activate(context: ExtensionContext) {
             log: true,
         });
         liteLogger.appendLine(
-            `Motoko lite mode is ON (motoko.lite): the language server runs without the Motoko compiler, so type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, and the "Import Mops Package" command are unavailable. Formatting, syntax highlighting, snippets, and dfx.json schema validation keep working. Set "motoko.lite" to false and reload the window to re-enable the compiler.`,
+            `Motoko lite mode is ON (motoko.lite): the language server runs without the Motoko compiler, so type checking, completions, hover, go to definition, references/rename, code actions, signature help, workspace symbols, the "Deploy" and "Import Mops Package" commands, and the Test Explorer are unavailable. Formatting, syntax highlighting, snippets, and dfx.json schema validation keep working. Set "motoko.lite" to false and reload the window to re-enable the compiler.`,
         );
         context.subscriptions.push(liteLogger);
     } else {
@@ -262,7 +265,7 @@ function getInitializationOptions() {
     const config = workspace.getConfiguration('motoko');
     return {
         formatter: config.get('formatter'),
-        lite: config.get<boolean>('lite') ?? false,
+        lite,
     };
 }
 
@@ -274,17 +277,21 @@ function restartLanguageServer(
         console.log('Restarting Motoko language server');
         client.stop().catch((err) => console.error(err.stack || err));
     }
+    const initializationOptions = getInitializationOptions();
     const clientOptions: LanguageClientOptions = {
         documentSelector: [
             { scheme: 'file', language: 'motoko' },
             // { scheme: 'untitled', language: 'motoko' },
         ],
-        initializationOptions: getInitializationOptions(),
+        initializationOptions,
         synchronize: {
             // Synchronize the setting section 'motoko' to the server
             configurationSection: 'motoko',
-            // Notify the server about external changes to `.mo` workspace files
-            fileEvents: workspace.createFileSystemWatcher(watchGlob),
+            // Notify the server about external changes to `.mo` workspace
+            // files. The lite server ignores them, so skip the watcher.
+            fileEvents: initializationOptions.lite
+                ? undefined
+                : workspace.createFileSystemWatcher(watchGlob),
         },
     };
     client = new LanguageClient(
