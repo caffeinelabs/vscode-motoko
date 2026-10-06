@@ -351,7 +351,7 @@ export function getMocJs(
         return okAsync(destPath);
     }
     console.log(`Downloading moc-${version}.js`);
-    const url = `https://github.com/dfinity/motoko/releases/download/${version}/moc-${version}.js`;
+    const url = `https://github.com/caffeinelabs/motoko/releases/download/${version}/moc-${version}.js`;
 
     return ResultAsync.fromPromise(
         axios.get(url, { responseType: 'stream' }),

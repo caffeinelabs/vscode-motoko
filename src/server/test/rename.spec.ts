@@ -139,7 +139,7 @@ describe('prepare rename', () => {
     // there is no sense in testing this.
     test('Can not prepare rename externally imported function', () =>
         testPrepareRename(
-            location('prepare_rename.mo', 10, 39, 42), // new
+            location('prepare_rename.mo', 10, 34, 39), // empty
             false,
         ));
 });
