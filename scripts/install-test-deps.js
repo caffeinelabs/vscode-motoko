@@ -21,7 +21,11 @@ function install(dir) {
     });
 }
 
-Promise.all(dirs.map(install)).then(
+// Sequential: parallel installs of the same package race on the shared mops cache
+dirs.reduce(
+    (prev, dir) => prev.then(() => install(dir)),
+    Promise.resolve(),
+).then(
     () => console.log('All test dependencies installed.'),
     (err) => {
         console.error(err.message);
