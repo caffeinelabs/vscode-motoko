@@ -1,4 +1,4 @@
 {
-     dependencies = [ "base" ],
+     dependencies = [ "core" ],
      compiler = None Text
 }

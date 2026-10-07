@@ -1,4 +1,4 @@
-import Vector "mo:vector";
+import List "mo:core/List";
 import ImportMe "import_me";
 
 type record = { field : Nat };
@@ -8,4 +8,4 @@ func _test() : Nat {
     value.field
 };
 
-let _vec : Vector.Vector<Nat> = Vector.new();
+let _list : List.List<Nat> = List.empty();

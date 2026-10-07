@@ -1,9 +1,9 @@
-import Vector "mo:vector";
-import Array "mo:base/Array";
+import List "mo:core/List";
+import Array "mo:core/Array";
 
-persistent actor A {
-    let a : Vector.Vector<Int> = Vector.new();
-    let b : [var Int] = Array.init(2, 42);
-    let c : Vector
-           .Vector<Int> = Vector.new();
+actor A {
+    let a : List.List<Int> = List.empty();
+    let b : [Int] = Array.repeat(42, 2);
+    let c : List
+           .List<Int> = List.empty();
 };

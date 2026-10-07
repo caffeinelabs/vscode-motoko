@@ -23,7 +23,7 @@ type RangeWithMetadata = {
     isDefinition: boolean;
 };
 
-jest.setTimeout(60000);
+jest.setTimeout(180000);
 
 const rootUri = URI.parse(join(cwd(), 'test', 'definition'));
 

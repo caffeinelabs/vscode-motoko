@@ -12,8 +12,8 @@ import { Connection, Location, Position, Range } from 'vscode-languageserver';
 
 const rootPath = join(cwd(), 'test', 'definition');
 const rootUri = URI.parse(rootPath);
-const vectorPath = join('.mops', 'vector@0.4.1', 'src', 'lib.mo');
-const arrayPath = join('.mops', 'base@0.13.4', 'src', 'Array.mo');
+const listPath = join('.mops', 'core@2.0.0', 'src', 'List.mo');
+const arrayPath = join('.mops', 'core@2.0.0', 'src', 'Array.mo');
 
 jest.setTimeout(60000);
 
@@ -86,78 +86,78 @@ describe('go to definition', () => {
 
     // module {
     //^^
-    const baseArrayModuleDelcPos = location(arrayPath, 19, 0, 0);
+    const arrayModuleDeclPos = location(arrayPath, 21, 0, 0);
     test.each([
         // Jump from:
-        // let b : [var Int] = Array.init();
-        // 1)                 ^^
-        // 2)                  ^^
-        // 3)                      ^^
-        { pos: { line: 5, character: 24 }, declPos: baseArrayModuleDelcPos },
-        { pos: { line: 5, character: 25 }, declPos: baseArrayModuleDelcPos },
-        { pos: { line: 5, character: 29 }, declPos: baseArrayModuleDelcPos },
-    ])('base:Array-%#', testDefinitionSimple);
+        // let b : [Int] = Array.repeat(42, 2);
+        // 1)             ^^
+        // 2)              ^^
+        // 3)                  ^^
+        { pos: { line: 5, character: 20 }, declPos: arrayModuleDeclPos },
+        { pos: { line: 5, character: 21 }, declPos: arrayModuleDeclPos },
+        { pos: { line: 5, character: 25 }, declPos: arrayModuleDeclPos },
+    ])('core:Array-%#', testDefinitionSimple);
 
-    // public func init<X>(...
+    // public func repeat<T>(...
     //            ^^
-    const baseArrayInitDelcPos = location(arrayPath, 28, 14, 18);
+    const arrayRepeatDeclPos = location(arrayPath, 45, 14, 20);
     test.each([
         // Jump from:
-        // let b : [var Int] = Array.init();
-        // 1)                       ^^
-        // 2)                        ^^
-        // 3)                           ^^
-        { pos: { line: 5, character: 30 }, declPos: baseArrayInitDelcPos },
-        { pos: { line: 5, character: 31 }, declPos: baseArrayInitDelcPos },
-        { pos: { line: 5, character: 34 }, declPos: baseArrayInitDelcPos },
-    ])('base:Array.init-%#', testDefinitionSimple);
+        // let b : [Int] = Array.repeat(42, 2);
+        // 1)                   ^^
+        // 2)                    ^^
+        // 3)                          ^^
+        { pos: { line: 5, character: 26 }, declPos: arrayRepeatDeclPos },
+        { pos: { line: 5, character: 27 }, declPos: arrayRepeatDeclPos },
+        { pos: { line: 5, character: 32 }, declPos: arrayRepeatDeclPos },
+    ])('core:Array.repeat-%#', testDefinitionSimple);
 
     // module {
     //^^
-    const vectorModuleDeclPos = location(vectorPath, 19, 0, 0);
+    const listModuleDeclPos = location(listPath, 23, 0, 0);
     test.each([
         // Jump from:
-        // let a : Vector.Vector<Int> = Vector.new();
+        // let a : List.List<Int> = List.empty();
         // 1)     ^^
         // 2)      ^^
-        // 3)           ^^
-        // 4)                          ^^
-        // 5)                           ^^
-        // 6)                                ^^
-        { pos: { line: 4, character: 12 }, declPos: vectorModuleDeclPos },
-        { pos: { line: 4, character: 13 }, declPos: vectorModuleDeclPos },
-        { pos: { line: 4, character: 18 }, declPos: vectorModuleDeclPos },
-        { pos: { line: 4, character: 33 }, declPos: vectorModuleDeclPos },
-        { pos: { line: 4, character: 34 }, declPos: vectorModuleDeclPos },
-        { pos: { line: 4, character: 39 }, declPos: vectorModuleDeclPos },
-    ])('vector:Vector-%#', testDefinitionSimple);
+        // 3)         ^^
+        // 4)                      ^^
+        // 5)                       ^^
+        // 6)                          ^^
+        { pos: { line: 4, character: 12 }, declPos: listModuleDeclPos },
+        { pos: { line: 4, character: 13 }, declPos: listModuleDeclPos },
+        { pos: { line: 4, character: 16 }, declPos: listModuleDeclPos },
+        { pos: { line: 4, character: 29 }, declPos: listModuleDeclPos },
+        { pos: { line: 4, character: 30 }, declPos: listModuleDeclPos },
+        { pos: { line: 4, character: 33 }, declPos: listModuleDeclPos },
+    ])('core:List-%#', testDefinitionSimple);
 
-    // public type Vector<X> = {
+    // public type List<T> = Types.List<T>;
     //            ^^
-    const vectorTypeDeclPos = location(vectorPath, 27, 14, 20);
+    const listTypeDeclPos = location(listPath, 31, 14, 18);
     test.each([
         // Jump from:
-        // let a : Vector.Vector<Int> = Vector.new();
-        // 1)            ^^
-        // 2)             ^^
-        // 3)                  ^^
-        // 4)                       ^^
-        { pos: { line: 4, character: 19 }, declPos: vectorTypeDeclPos },
-        { pos: { line: 4, character: 20 }, declPos: vectorTypeDeclPos },
-        { pos: { line: 4, character: 25 }, declPos: vectorTypeDeclPos },
-        { pos: { line: 4, character: 30 }, declPos: vectorTypeDeclPos },
-    ])('vector:Vector.Vector-%#', testDefinitionSimple);
+        // let a : List.List<Int> = List.empty();
+        // 1)          ^^
+        // 2)           ^^
+        // 3)              ^^
+        // 4)                   ^^
+        { pos: { line: 4, character: 17 }, declPos: listTypeDeclPos },
+        { pos: { line: 4, character: 18 }, declPos: listTypeDeclPos },
+        { pos: { line: 4, character: 21 }, declPos: listTypeDeclPos },
+        { pos: { line: 4, character: 26 }, declPos: listTypeDeclPos },
+    ])('core:List.List-%#', testDefinitionSimple);
 
     test.each([
         // Jump from:
-        // let c : Vector
-        //        .Vector<Int> = Vector.new();
-        { pos: { line: 6, character: 12 }, declPos: vectorModuleDeclPos },
-        { pos: { line: 6, character: 13 }, declPos: vectorModuleDeclPos },
-        { pos: { line: 6, character: 18 }, declPos: vectorModuleDeclPos },
-        { pos: { line: 7, character: 12 }, declPos: vectorTypeDeclPos },
-        { pos: { line: 7, character: 13 }, declPos: vectorTypeDeclPos },
-        { pos: { line: 7, character: 18 }, declPos: vectorTypeDeclPos },
+        // let c : List
+        //        .List<Int> = List.empty();
+        { pos: { line: 6, character: 12 }, declPos: listModuleDeclPos },
+        { pos: { line: 6, character: 13 }, declPos: listModuleDeclPos },
+        { pos: { line: 6, character: 16 }, declPos: listModuleDeclPos },
+        { pos: { line: 7, character: 12 }, declPos: listTypeDeclPos },
+        { pos: { line: 7, character: 13 }, declPos: listTypeDeclPos },
+        { pos: { line: 7, character: 16 }, declPos: listTypeDeclPos },
     ])('multiline-%#', testDefinitionSimple);
 
     test('Can find object method definition', () =>

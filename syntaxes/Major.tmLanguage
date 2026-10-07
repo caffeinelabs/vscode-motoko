@@ -736,7 +736,7 @@
 					<key>comment</key>
 					<string>other keyword</string>
 					<key>match</key>
-					<string>\b(query|composite|stable|flexible|persistent|transient|implicit|weak|mixin)\b</string>
+					<string>\b(query|composite|stable|persistent|transient|implicit|weak|mixin)\b</string>
 					<key>name</key>
 					<string>keyword.other.motoko</string>
 				</dict>

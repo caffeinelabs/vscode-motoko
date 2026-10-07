@@ -56,6 +56,14 @@ jobs:
             exit 0
           fi
           echo "skip=false" >> "$GITHUB_OUTPUT"
+          # The dispatch fires right after publish, before the registry lists the new version
+          for attempt in $(seq 1 20); do
+            if npm view "motoko@${target}" version --min-release-age=0 >/dev/null 2>&1; then
+              break
+            fi
+            echo "motoko@${target} not on npm yet (attempt ${attempt}/20); retrying in 30s"
+            sleep 30
+          done
           npm install "motoko@^${target}" --min-release-age=0  # bypass .npmrc quarantine for fresh releases
           npm version "$VERSION_BUMP" --no-git-tag-version
 

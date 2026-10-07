@@ -48,7 +48,7 @@ The public functions of an actor are a special kind of function called shared fu
 For example, you can rewrite the object above as an actor:
 
 ```motoko
-persistent actor Digit {
+actor Digit {
    var value = 0;
    func reset() { value := 0 };
    public shared func inc() : async (){
@@ -64,7 +64,7 @@ persistent actor Digit {
 Since the public functions of an actor must be `shared`, you can omit the `shared` keyword:
 
 ```motoko
-persistent actor Digit {
+actor Digit {
    var value = 0;
    func reset() { value := 0 };
    public func inc() : async () {
